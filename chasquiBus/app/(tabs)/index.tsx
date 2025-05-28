@@ -54,6 +54,7 @@ export default function HomeScreen() {
 
   const handleSearch = () => {
     console.log('Buscando viajes:', { fromLocation, toLocation, selectedDate });
+    router.push('/buses');
   };
 
   const handleDateSelect = (date: string) => {
