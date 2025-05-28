@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS } from '../constants/Colors';
 
@@ -12,6 +13,7 @@ const slides = [
 ];
 
 export default function WelcomeScreen() {
+  const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -46,59 +48,81 @@ export default function WelcomeScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
-      
-      <View style={styles.contentContainer}>
-        <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
-          <Image
-            source={slides[currentIndex]}
-            style={styles.logo}
-            contentFit="contain"
-          />
-        </Animated.View>
-
-        <Text style={styles.title}>
-          ¡Bienvenido!!! 🚌✨
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Tu aplicación ideal para reservar asientos de{'\n'}
-          autobús de forma sencilla, consultar horarios{'\n'}
-          en tiempo real, realizar pagos seguros y{'\n'}
-          recibir actualizaciones de viaje.
-        </Text>
-
-        <View style={styles.dotsContainer}>
-          {slides.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dot,
-                currentIndex === index && styles.activeDot
-              ]}
+    <>
+      <Stack.Screen 
+        options={{
+          headerShown: true,
+          title: '',
+          headerStyle: {
+            backgroundColor: '#E6F0FF',
+          },
+          headerShadowVisible: false,
+          headerTintColor: '#0F172A',
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ paddingLeft: 16 }}
+              accessibilityLabel="Volver"
+            >
+              <Ionicons name="arrow-back" size={24} color="#0F172A" />
+            </TouchableOpacity>
+          ),
+        }} 
+      />
+      <View style={styles.container}>
+        <StatusBar style="dark" />
+        
+        <View style={styles.contentContainer}>
+          <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
+            <Image
+              source={slides[currentIndex]}
+              style={styles.logo}
+              contentFit="contain"
             />
-          ))}
+          </Animated.View>
+
+          <Text style={styles.title}>
+            ¡Bienvenido!!! 🚌✨
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Tu aplicación ideal para reservar asientos de{'\n'}
+            autobús de forma sencilla, consultar horarios{'\n'}
+            en tiempo real, realizar pagos seguros y{'\n'}
+            recibir actualizaciones de viaje.
+          </Text>
+
+          <View style={styles.dotsContainer}>
+            {slides.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  currentIndex === index && styles.activeDot
+                ]}
+              />
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleLogin}
+          >
+            <Text style={styles.buttonText}>
+              COMENZAR
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleRegister}
+          >
+            <Text style={styles.createAccountText}>
+              Crear Cuenta
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleLogin}
-        >
-          <Text style={styles.buttonText}>
-            COMENZAR
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleRegister}
-        >
-          <Text style={styles.createAccountText}>
-            Crear Cuenta
-          </Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </>
   );
 }
 
