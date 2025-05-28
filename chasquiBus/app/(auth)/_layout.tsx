@@ -1,12 +1,11 @@
 import { Stack } from 'expo-router';
 import { useColorScheme } from 'react-native';
 
-export default function RootLayout() {
+export default function AuthLayout() {
   const colorScheme = useColorScheme();
 
   return (
     <Stack
-      initialRouteName="welcome"
       screenOptions={{
         headerStyle: {
           backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
@@ -18,23 +17,17 @@ export default function RootLayout() {
       }}
     >
       <Stack.Screen
-        name="welcome"
+        name="login"
         options={{
-          headerShown: false,
+          title: 'Iniciar Sesión',
         }}
       />
       <Stack.Screen
-        name="(auth)"
+        name="register"
         options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="(tabs)"
-        options={{
-          headerShown: false,
+          title: 'Crear Cuenta',
         }}
       />
     </Stack>
   );
-}
+} 
