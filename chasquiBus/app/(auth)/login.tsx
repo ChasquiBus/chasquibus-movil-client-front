@@ -3,13 +3,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Link, Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Image,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -22,6 +22,8 @@ export default function LoginScreen() {
 
   const handleLogin = () => {
     console.log('Login with:', { email, password, rememberMe });
+    // Simular login exitoso y redirigir al home
+    router.replace('/(tabs)');
   };
 
   return (
