@@ -179,7 +179,22 @@ export default function BusSelectionScreen() {
               <TouchableOpacity
                 key={bus.id}
                 style={styles.busCard}
-                onPress={() => console.log('Selected bus:', bus.id)}
+                onPress={() => {
+                  console.log('Selected bus:', bus.id);
+                  router.push({
+                    pathname: '/seat-selection',
+                    params: {
+                      busId: bus.id,
+                      company: bus.company,
+                      type: bus.type,
+                      departure: bus.departure,
+                      arrival: bus.arrival,
+                      duration: bus.duration,
+                      price: bus.price,
+                      seatsLeft: bus.seatsLeft
+                    }
+                  });
+                }}
               >
                 <View style={styles.busHeader}>
                   <Text style={styles.companyName}>{bus.company}</Text>
