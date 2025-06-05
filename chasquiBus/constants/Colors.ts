@@ -24,3 +24,26 @@ export const Colors = {
     tabIconSelected: tintColorDark,
   },
 };
+
+export const COLORS = {
+    // Colores de la bandera de Ecuador
+    ECUADOR_YELLOW: '#FFD100',
+    ECUADOR_BLUE: '#0000FF',
+    ECUADOR_RED: '#FF0000',
+
+    // Colores de la aplicación
+    PRIMARY: '#0000FF',
+    BACKGROUND: '#FFFFFF',
+    TEXT: {
+        PRIMARY: '#000000',
+        SECONDARY: '#666666',
+    },
+    BUTTON: {
+        PRIMARY: '#0000FF',
+        TEXT: '#FFFFFF',
+    },
+    DOTS: {
+        ACTIVE: '#0000FF',
+        INACTIVE: '#D9D9D9',
+    }
+};
