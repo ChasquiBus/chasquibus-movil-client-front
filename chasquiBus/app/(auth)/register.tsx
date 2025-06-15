@@ -2,8 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  Animated,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -30,11 +32,11 @@ export default function RegisterScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const successAnim = useRef(new Animated.Value(0)).current;
 
   const handleSignUp = async () => {
     setError('');
-    setSuccess('');
     setLoading(true);
     try {
       const response = await fetch('http://192.168.1.4:3005/auth/register', {
@@ -55,7 +57,12 @@ export default function RegisterScreen() {
         }),
       });
       if (response.status === 201) {
-        setSuccess('¡Registro exitoso!');
+        setShowSuccessModal(true);
+        Animated.timing(successAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }).start();
         setName('');
         setApellido('');
         setCedula('');
@@ -68,7 +75,14 @@ export default function RegisterScreen() {
         setPorcentajeDiscapacidad('');
         setAcceptedTerms(false);
         setTimeout(() => {
-          router.replace('/(auth)/login');
+          Animated.timing(successAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowSuccessModal(false);
+            router.replace('/(auth)/login');
+          });
         }, 1500);
       } else if (response.status === 409) {
         setError('El correo o cédula ya está registrado.');
@@ -288,9 +302,6 @@ export default function RegisterScreen() {
                 {error ? (
                   <Text style={{ color: 'red', textAlign: 'center', marginBottom: 10 }}>{error}</Text>
                 ) : null}
-                {success ? (
-                  <Text style={{ color: 'green', textAlign: 'center', marginBottom: 10 }}>{success}</Text>
-                ) : null}
 
                 <TouchableOpacity
                   style={[
@@ -303,8 +314,6 @@ export default function RegisterScreen() {
                   <Text style={styles.signUpButtonText}>Registrarse</Text>
                 </TouchableOpacity>
 
-               
-
                 <View style={styles.loginContainer}>
                   <Text style={styles.loginText}>¿Ya tienes una cuenta? </Text>
                   <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
@@ -316,6 +325,29 @@ export default function RegisterScreen() {
           </ScrollView>
         </LinearGradient>
       </SafeAreaView>
+      {/* Modal de éxito */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <Animated.View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.35)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          opacity: successAnim,
+        }}>
+          <View style={styles.successModalBox}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+            </View>
+            <Text style={styles.successTitle}>¡Registro exitoso!</Text>
+            <Text style={styles.successSubtitle}>Ahora puedes iniciar sesión</Text>
+          </View>
+        </Animated.View>
+      </Modal>
     </>
   );
 }
@@ -466,5 +498,36 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#7B61FF',
+  },
+  successModalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 260,
+  },
+  successIconCircle: {
+    backgroundColor: '#E6F9ED',
+    borderRadius: 50,
+    padding: 12,
+    marginBottom: 18,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#22C55E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
   },
 }); 
