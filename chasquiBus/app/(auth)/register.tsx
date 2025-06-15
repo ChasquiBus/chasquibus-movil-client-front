@@ -1,16 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 export default function RegisterScreen() {
@@ -20,10 +20,65 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [apellido, setApellido] = useState('');
+  const [cedula, setCedula] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [esDiscapacitado, setEsDiscapacitado] = useState(false);
+  const [porcentajeDiscapacidad, setPorcentajeDiscapacidad] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
+  const [fechaNacimientoDisplay, setFechaNacimientoDisplay] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleSignUp = () => {
-    // Aquí irá la lógica de registro
-    console.log('Registrando usuario:', { name, email, password });
+  const handleSignUp = async () => {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const response = await fetch('http://192.168.1.4:3005/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          nombre: name,
+          apellido,
+          cedula,
+          telefono,
+          activo: true,
+          rol: 4,
+          esDiscapacitado,
+          porcentajeDiscapacidad: esDiscapacitado ? Number(porcentajeDiscapacidad) : 0,
+          fechaNacimiento,
+        }),
+      });
+      if (response.status === 201) {
+        setSuccess('¡Registro exitoso!');
+        setName('');
+        setApellido('');
+        setCedula('');
+        setTelefono('');
+        setEmail('');
+        setPassword('');
+        setFechaNacimiento('');
+        setFechaNacimientoDisplay('');
+        setEsDiscapacitado(false);
+        setPorcentajeDiscapacidad('');
+        setAcceptedTerms(false);
+        setTimeout(() => {
+          router.replace('/(auth)/login');
+        }, 1500);
+      } else if (response.status === 409) {
+        setError('El correo o cédula ya está registrado.');
+      } else {
+        setError('Error al registrar. Verifica los datos.');
+      }
+    } catch (e) {
+      setError('Error de red. Intenta nuevamente.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -73,6 +128,43 @@ export default function RegisterScreen() {
                 </View>
 
                 <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Apellido</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Pérez"
+                    value={apellido}
+                    onChangeText={setApellido}
+                    autoCapitalize="words"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Cédula</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="1234567890"
+                    value={cedula}
+                    onChangeText={setCedula}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Teléfono</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+593987654321"
+                    value={telefono}
+                    onChangeText={setTelefono}
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
                   <Text style={styles.label}>Correo Electrónico</Text>
                   <TextInput
                     style={styles.input}
@@ -109,6 +201,75 @@ export default function RegisterScreen() {
                   </View>
                 </View>
 
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Fecha de Nacimiento</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Text style={{ color: fechaNacimiento ? '#0F172A' : '#999' }}>
+                      {fechaNacimientoDisplay ? fechaNacimientoDisplay : 'Selecciona la fecha'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={fechaNacimiento ? new Date(fechaNacimiento) : new Date()}
+                      mode="date"
+                      display="default"
+                      maximumDate={new Date()}
+                      onChange={(event, selectedDate) => {
+                        setShowDatePicker(false);
+                        if (selectedDate) {
+                          const year = selectedDate.getFullYear();
+                          const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(selectedDate.getDate()).padStart(2, '0');
+                          setFechaNacimiento(`${year}-${month}-${day}`);
+                          setFechaNacimientoDisplay(`${day}/${month}/${year}`);
+                        }
+                      }}
+                    />
+                  )}
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>¿Es discapacitado?</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
+                      onPress={() => setEsDiscapacitado(true)}
+                    >
+                      <View style={[styles.radioOuter, esDiscapacitado && styles.radioOuterSelected]}>
+                        {esDiscapacitado && <View style={styles.radioInner} />}
+                      </View>
+                      <Text style={{ marginLeft: 6 }}>Sí</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
+                      onPress={() => setEsDiscapacitado(false)}
+                    >
+                      <View style={[styles.radioOuter, !esDiscapacitado && styles.radioOuterSelected]}>
+                        {!esDiscapacitado && <View style={styles.radioInner} />}
+                      </View>
+                      <Text style={{ marginLeft: 6 }}>No</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {esDiscapacitado && (
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Porcentaje de Discapacidad</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="0-100"
+                      value={porcentajeDiscapacidad}
+                      onChangeText={setPorcentajeDiscapacidad}
+                      keyboardType="numeric"
+                      maxLength={3}
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                )}
+
                 <View style={styles.termsContainer}>
                   <TouchableOpacity
                     style={styles.checkboxContainer}
@@ -124,6 +285,13 @@ export default function RegisterScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {error ? (
+                  <Text style={{ color: 'red', textAlign: 'center', marginBottom: 10 }}>{error}</Text>
+                ) : null}
+                {success ? (
+                  <Text style={{ color: 'green', textAlign: 'center', marginBottom: 10 }}>{success}</Text>
+                ) : null}
+
                 <TouchableOpacity
                   style={[
                     styles.signUpButton,
@@ -135,15 +303,7 @@ export default function RegisterScreen() {
                   <Text style={styles.signUpButtonText}>Registrarse</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.orText}>O regístrate con</Text>
-
-                <TouchableOpacity style={styles.googleButton}>
-                  <Image
-                    source={require('../../assets/images/goo.png')}
-                    style={styles.googleIcon}
-                  />
-                  <Text style={styles.googleButtonText}>Continuar con Google</Text>
-                </TouchableOpacity>
+               
 
                 <View style={styles.loginContainer}>
                   <Text style={styles.loginText}>¿Ya tienes una cuenta? </Text>
@@ -274,25 +434,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DADCE0',
-    borderRadius: 30,
-    padding: 16,
-    marginBottom: 24,
-  },
-  googleIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 12,
-  },
-  googleButtonText: {
-    color: '#0F172A',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -306,5 +447,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7B61FF',
     fontWeight: '600',
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#7B61FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 2,
+  },
+  radioOuterSelected: {
+    borderColor: '#7B61FF',
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#7B61FF',
   },
 }); 
