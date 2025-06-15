@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-    Image,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Animated,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -17,13 +18,59 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const successAnim = useRef(new Animated.Value(0)).current;
 
   const router = useRouter();
 
-  const handleLogin = () => {
-    console.log('Login with:', { email, password, rememberMe });
-    // Simular login exitoso y redirigir al home
-    router.replace('/(tabs)');
+  const handleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const response = await fetch('http://192.168.1.4:3005/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = {};
+      }
+    
+      // Éxito si status 2xx y hay access_token
+      if (response.ok && data.access_token) {
+        setError('');
+        setShowSuccessModal(true);
+        Animated.timing(successAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }).start();
+        setTimeout(() => {
+          Animated.timing(successAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowSuccessModal(false);
+            router.replace('/(tabs)');
+          });
+        }, 1200);
+      } else if (response.status === 401) {
+        setError('Correo o contraseña incorrectos.');
+      } else if (data.message) {
+        setError(data.message);
+      } else {
+        setError('Error al iniciar sesión. Intenta nuevamente.');
+      }
+    } catch (e) {
+      setError('Error de red. Intenta nuevamente.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -113,19 +160,13 @@ export default function LoginScreen() {
               <Text style={styles.checkboxLabel}>Mantenerme registrado</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
+              <Text style={styles.loginButtonText}>{loading ? 'Cargando...' : 'Iniciar Sesión'}</Text>
             </TouchableOpacity>
 
-            <Text style={styles.orText}>O inicia sesión con</Text>
-
-            <TouchableOpacity style={styles.googleButton}>
-              <Image
-                source={require('../../assets/images/goo.png')}
-                style={styles.googleIcon}
-              />
-              <Text style={styles.googleButtonText}>Continuar con Google</Text>
-            </TouchableOpacity>
+            {error ? (
+              <Text style={{ color: 'red', textAlign: 'center', marginBottom: 10 }}>{error}</Text>
+            ) : null}
 
             <Link href="/(auth)/register" style={styles.createAccountText}>
               Crear una cuenta
@@ -133,6 +174,29 @@ export default function LoginScreen() {
           </View>
         </LinearGradient>
       </SafeAreaView>
+      {/* Modal de éxito */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <Animated.View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.35)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          opacity: successAnim,
+        }}>
+          <View style={styles.successModalBox}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+            </View>
+            <Text style={styles.successTitle}>¡Bienvenido!</Text>
+            <Text style={styles.successSubtitle}>Inicio de sesión exitoso</Text>
+          </View>
+        </Animated.View>
+      </Modal>
     </>
   );
 }
@@ -240,41 +304,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  orText: {
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DADCE0',
-    borderRadius: 30,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-  },
-  googleIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 12,
-  },
-  googleButtonText: {
-    color: '#0F172A',
-    fontSize: 16,
-    fontWeight: '500',
-  },
   createAccountText: {
     color: '#7B61FF',
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  successModalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 260,
+  },
+  successIconCircle: {
+    backgroundColor: '#E6F9ED',
+    borderRadius: 50,
+    padding: 12,
+    marginBottom: 18,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#22C55E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });
