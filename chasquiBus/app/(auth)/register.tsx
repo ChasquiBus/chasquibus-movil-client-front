@@ -87,7 +87,7 @@ export default function RegisterScreen() {
       fechaNacimiento,
     };
     
-
+//tener en cuenta que el backend esta en el puerto 3001
     try {
       const response = await fetch('http://192.168.1.4:3001/auth/register', {
         method: 'POST',
