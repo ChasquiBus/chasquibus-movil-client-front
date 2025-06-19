@@ -35,26 +35,68 @@ export default function RegisterScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const successAnim = useRef(new Animated.Value(0)).current;
 
+  const validateEcuadorianCedula = (cedula: string) => {
+    if (!/^[0-9]{10}$/.test(cedula)) return false;
+    const province = parseInt(cedula.substring(0, 2), 10);
+    if (province < 1 || province > 24) return false;
+    const digits = cedula.split('').map(Number);
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      let value = digits[i];
+      if (i % 2 === 0) {
+        value *= 2;
+        if (value > 9) value -= 9;
+      }
+      sum += value;
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    return checkDigit === digits[9];
+  };
+
+  const getAge = (birthDateString: string) => {
+    if (!birthDateString) return 0;
+    const today = new Date();
+    const birthDate = new Date(birthDateString);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const handleSignUp = async () => {
     setError('');
+    if (!validateEcuadorianCedula(cedula)) {
+      setError('La cédula ingresada no es válida para Ecuador.');
+      return;
+    }
+    const age = getAge(fechaNacimiento);
+    if (age < 16) {
+      setError('Debes ser mayor de 16 años para registrarte.');
+      return;
+    }
     setLoading(true);
+
+    const dataToSend = {
+      email,
+      password,
+      nombre: name,
+      apellido,
+      cedula,
+      telefono,
+      activo: true,
+      esDiscapacitado,
+      porcentajeDiscapacidad: esDiscapacitado ? Number(porcentajeDiscapacidad) : 0,
+      fechaNacimiento,
+    };
+    
+
     try {
-      const response = await fetch('http://192.168.1.4:3005/auth/register', {
+      const response = await fetch('http://192.168.1.4:3001/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          nombre: name,
-          apellido,
-          cedula,
-          telefono,
-          activo: true,
-          rol: 4,
-          esDiscapacitado,
-          porcentajeDiscapacidad: esDiscapacitado ? Number(porcentajeDiscapacidad) : 0,
-          fechaNacimiento,
-        }),
+        body: JSON.stringify(dataToSend),
       });
       if (response.status === 201) {
         setShowSuccessModal(true);
@@ -218,19 +260,30 @@ export default function RegisterScreen() {
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>Fecha de Nacimiento</Text>
                   <TouchableOpacity
-                    style={[styles.input, { justifyContent: 'center' }]}
+                    style={[styles.input, { justifyContent: 'center', flexDirection: 'row', alignItems: 'center', paddingRight: 12 }]}
                     onPress={() => setShowDatePicker(true)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={{ color: fechaNacimiento ? '#0F172A' : '#999' }}>
+                    <Text style={{ color: fechaNacimiento ? '#7B61FF' : '#7B61FF', flex: 1 }}>
                       {fechaNacimientoDisplay ? fechaNacimientoDisplay : 'Selecciona la fecha'}
                     </Text>
+                    <Ionicons name="calendar-outline" size={22} color="#7B61FF" style={{ marginLeft: 8 }} />
                   </TouchableOpacity>
                   {showDatePicker && (
                     <DateTimePicker
-                      value={fechaNacimiento ? new Date(fechaNacimiento) : new Date()}
+                      value={fechaNacimiento ? new Date(fechaNacimiento) : (() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 18);
+                        return d;
+                      })()}
                       mode="date"
-                      display="default"
+                      display="spinner"
                       maximumDate={new Date()}
+                      minimumDate={(() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 100);
+                        return d;
+                      })()}
                       onChange={(event, selectedDate) => {
                         setShowDatePicker(false);
                         if (selectedDate) {
@@ -241,6 +294,7 @@ export default function RegisterScreen() {
                           setFechaNacimientoDisplay(`${day}/${month}/${year}`);
                         }
                       }}
+                      textColor="#7B61FF"
                     />
                   )}
                 </View>
