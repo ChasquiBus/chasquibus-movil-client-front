@@ -25,8 +25,6 @@ export default function RegisterScreen() {
   const [apellido, setApellido] = useState('');
   const [cedula, setCedula] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [esDiscapacitado, setEsDiscapacitado] = useState(false);
-  const [porcentajeDiscapacidad, setPorcentajeDiscapacidad] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [fechaNacimientoDisplay, setFechaNacimientoDisplay] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -86,8 +84,6 @@ export default function RegisterScreen() {
       cedula,
       telefono,
       activo: true,
-      esDiscapacitado,
-      porcentajeDiscapacidad: esDiscapacitado ? Number(porcentajeDiscapacidad) : 0,
       fechaNacimiento,
     };
     
@@ -113,8 +109,6 @@ export default function RegisterScreen() {
         setPassword('');
         setFechaNacimiento('');
         setFechaNacimientoDisplay('');
-        setEsDiscapacitado(false);
-        setPorcentajeDiscapacidad('');
         setAcceptedTerms(false);
         setTimeout(() => {
           Animated.timing(successAnim, {
@@ -298,45 +292,6 @@ export default function RegisterScreen() {
                     />
                   )}
                 </View>
-
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>¿Es discapacitado?</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center' }}
-                      onPress={() => setEsDiscapacitado(true)}
-                    >
-                      <View style={[styles.radioOuter, esDiscapacitado && styles.radioOuterSelected]}>
-                        {esDiscapacitado && <View style={styles.radioInner} />}
-                      </View>
-                      <Text style={{ marginLeft: 6 }}>Sí</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center' }}
-                      onPress={() => setEsDiscapacitado(false)}
-                    >
-                      <View style={[styles.radioOuter, !esDiscapacitado && styles.radioOuterSelected]}>
-                        {!esDiscapacitado && <View style={styles.radioInner} />}
-                      </View>
-                      <Text style={{ marginLeft: 6 }}>No</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {esDiscapacitado && (
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Porcentaje de Discapacidad</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="0-100"
-                      value={porcentajeDiscapacidad}
-                      onChangeText={setPorcentajeDiscapacidad}
-                      keyboardType="numeric"
-                      maxLength={3}
-                      placeholderTextColor="#999"
-                    />
-                  </View>
-                )}
 
                 <View style={styles.termsContainer}>
                   <TouchableOpacity
@@ -533,25 +488,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7B61FF',
     fontWeight: '600',
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#7B61FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 2,
-  },
-  radioOuterSelected: {
-    borderColor: '#7B61FF',
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#7B61FF',
   },
   successModalBox: {
     backgroundColor: '#fff',
