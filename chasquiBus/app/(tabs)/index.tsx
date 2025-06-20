@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -14,6 +17,33 @@ import {
   View,
 } from 'react-native';
 
+const API_URL = 'http://192.168.1.4:3001';
+
+// Interfaces for TypeScript type safety
+interface Usuario {
+  id: number;
+  nombre: string;
+  email: string;
+  cedula: string;
+}
+
+interface UserInfo {
+  id: number;
+  usuario: Usuario;
+}
+
+interface Boleto {
+  id: number;
+  nombre: string;
+  cedula: string;
+  hojaTrabajoId: number;
+}
+
+interface Ciudad {
+  id: number;
+  ciudad: string;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const [fromLocation, setFromLocation] = useState('');
@@ -21,48 +51,95 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState('Hoy');
   const [showMenu, setShowMenu] = useState(false);
 
-  // Datos simulados de próximos viajes
-  const upcomingTrips = [
-    {
-      id: 1,
-      terminal: 'Bus terminal 1',
-      from: 'Ambato',
-      to: 'Quito',
-      time: '9 AM',
-      date: '2024.12.08',
-      day: 'Sun'
-    },
-    {
-      id: 2,
-      terminal: 'Bus terminal 2',
-      from: 'Pelileo',
-      to: 'Guayaquil',
-      time: '2 PM',
-      date: '2024.12.08',
-      day: 'Sun'
-    },
-    {
-      id: 3,
-      terminal: 'Bus terminal 3',
-      from: 'Baños',
-      to: 'Cuenca',
-      time: '5 PM',
-      date: '2024.12.08',
-      day: 'Sun'
-    }
-  ];
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [upcomingTrips, setUpcomingTrips] = useState<Boleto[]>([]);
+  const [cities, setCities] = useState<Ciudad[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const [isFromModalVisible, setFromModalVisible] = useState(false);
+  const [isToModalVisible, setToModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const token = await AsyncStorage.getItem('access_token');
+        if (!token) {
+          router.replace('/(auth)/login');
+          return;
+        }
+
+        const profileResponse = await fetch(`${API_URL}/clientes/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (profileResponse.status === 401) {
+          await AsyncStorage.removeItem('access_token');
+          router.replace('/(auth)/login');
+          return;
+        }
+
+        if (!profileResponse.ok) {
+          throw new Error('No se pudo cargar el perfil del usuario.');
+        }
+
+        const profileData: UserInfo = await profileResponse.json();
+        setUserInfo(profileData);
+
+        if (profileData.usuario && profileData.usuario.cedula) {
+          const boletosResponse = await fetch(`${API_URL}/boletos/cedula/${profileData.usuario.cedula}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (boletosResponse.ok) {
+            const boletosData: Boleto[] = await boletosResponse.json();
+            setUpcomingTrips(boletosData);
+          }
+        }
+
+        const citiesResponse = await fetch(`${API_URL}/ciudades`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (citiesResponse.ok) {
+          const citiesData: Ciudad[] = await citiesResponse.json();
+          setCities(citiesData);
+        }
+
+      } catch (e: any) {
+        setError(e.message || 'Ocurrió un error al cargar los datos.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []);
 
   const handleSearch = () => {
-    console.log('Buscando viajes:', { fromLocation, toLocation, selectedDate });
-    router.push('/buses');
+    if (!fromLocation || !toLocation) {
+      alert('Por favor, ingresa el punto de salida y el destino.');
+      return;
+    }
+    router.push({
+      pathname: '/buses',
+      params: { from: fromLocation, to: toLocation, date: selectedDate },
+    });
   };
 
   const handleDateSelect = (date: string) => {
     setSelectedDate(date);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowMenu(false);
+    await AsyncStorage.removeItem('access_token');
     router.replace('/(auth)/login');
   };
 
@@ -70,6 +147,47 @@ export default function HomeScreen() {
     setShowMenu(false);
     router.push('/tickets');
   };
+
+  const openFromModal = () => {
+    setSearchQuery(''); // Reset search on open
+    setFromModalVisible(true);
+  };
+
+  const openToModal = () => {
+    setSearchQuery(''); // Reset search on open
+    setToModalVisible(true);
+  };
+
+  const renderCitySelectorModal = (
+    visible: boolean,
+    onClose: () => void,
+    onSelect: (value: string) => void,
+    data: Ciudad[]
+  ) => (
+    <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <View style={styles.cityModalContainer}>
+          <TextInput
+            style={styles.searchCityInput}
+            placeholder="Buscar ciudad..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#999"
+          />
+          <FlatList
+            data={data}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.cityItem} onPress={() => onSelect(item.ciudad)}>
+                <Text style={styles.cityItemText}>{item.ciudad}</Text>
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.citySeparator} />}
+          />
+        </View>
+      </Pressable>
+    </Modal>
+  );
 
   return (
     <>
@@ -88,18 +206,19 @@ export default function HomeScreen() {
             <View style={styles.userInfo}>
               <TouchableOpacity onPress={() => setShowMenu(!showMenu)}>
                 <Image
-                  source={require('../../assets/images/avatar.png')}
+                  source={require('../../assets/images/welcome.jpg')}
                   style={styles.avatar}
                 />
               </TouchableOpacity>
-              <Text style={styles.welcomeText}>¿A dónde quieres ir?</Text>
+              <Text style={styles.welcomeText}>
+                {userInfo ? `Hola, ${userInfo.usuario.nombre}` : '¿A dónde quieres ir?'}
+              </Text>
             </View>
             <TouchableOpacity style={styles.notificationButton}>
               <Ionicons name="notifications-outline" size={24} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
-          {/* Menu desplegable */}
           <Modal
             visible={showMenu}
             transparent={true}
@@ -110,10 +229,7 @@ export default function HomeScreen() {
               style={styles.modalOverlay}
               onPress={() => setShowMenu(false)}
             >
-              <View style={[styles.menuContainer, {
-                top: 70, // Posicionar debajo del avatar
-                left: 16,
-              }]}>
+              <View style={[styles.menuContainer, { top: 70, left: 16 }]}>
                 <TouchableOpacity 
                   style={styles.menuItem}
                   onPress={handleViewReservations}
@@ -121,9 +237,7 @@ export default function HomeScreen() {
                   <Ionicons name="ticket-outline" size={20} color="#0F172A" />
                   <Text style={styles.menuItemText}>Mis Reservas</Text>
                 </TouchableOpacity>
-                
                 <View style={styles.menuDivider} />
-                
                 <TouchableOpacity 
                   style={styles.menuItem}
                   onPress={handleLogout}
@@ -137,72 +251,75 @@ export default function HomeScreen() {
             </Pressable>
           </Modal>
 
+          {renderCitySelectorModal(
+            isFromModalVisible,
+            () => setFromModalVisible(false),
+            (city) => {
+              setFromLocation(city);
+              if (city === toLocation) setToLocation(''); // Reset destination if same
+              setFromModalVisible(false);
+              setSearchQuery('');
+            },
+            cities.filter(c => c.ciudad !== toLocation && c.ciudad.toLowerCase().includes(searchQuery.toLowerCase()))
+          )}
+          {renderCitySelectorModal(
+            isToModalVisible,
+            () => setToModalVisible(false),
+            (city) => {
+              setToLocation(city);
+              setToModalVisible(false);
+              setSearchQuery('');
+            },
+            cities.filter(c => c.ciudad !== fromLocation && c.ciudad.toLowerCase().includes(searchQuery.toLowerCase()))
+          )}
+
           <View style={styles.searchContainer}>
             <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Punto de salida"
-                value={fromLocation}
-                onChangeText={setFromLocation}
-                placeholderTextColor="#666"
-              />
+              <TouchableOpacity
+                style={[styles.input, loading && styles.inputDisabled]}
+                onPress={openFromModal}
+                disabled={loading}
+              >
+                <Text style={fromLocation ? styles.inputText : styles.placeholderText}>
+                  {fromLocation || 'Punto de salida'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.swapButton}>
                 <Ionicons name="swap-vertical" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-
             <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="¿A dónde vas?"
-                value={toLocation}
-                onChangeText={setToLocation}
-                placeholderTextColor="#666"
-              />
+              <TouchableOpacity
+                style={[styles.input, loading && styles.inputDisabled]}
+                onPress={openToModal}
+                disabled={loading}
+              >
+                <Text style={toLocation ? styles.inputText : styles.placeholderText}>
+                  {toLocation || '¿A dónde vas?'}
+                </Text>
+              </TouchableOpacity>
             </View>
-
             <View style={styles.dateContainer}>
               <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  selectedDate === 'Hoy' && styles.dateButtonActive
-                ]}
+                style={[styles.dateButton, selectedDate === 'Hoy' && styles.dateButtonActive]}
                 onPress={() => handleDateSelect('Hoy')}
               >
-                <Text style={[
-                  styles.dateButtonText,
-                  selectedDate === 'Hoy' && styles.dateButtonTextActive
-                ]}>Hoy</Text>
+                <Text style={[styles.dateButtonText, selectedDate === 'Hoy' && styles.dateButtonTextActive]}>Hoy</Text>
               </TouchableOpacity>
-              
               <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  selectedDate === 'Mañana' && styles.dateButtonActive
-                ]}
+                style={[styles.dateButton, selectedDate === 'Mañana' && styles.dateButtonActive]}
                 onPress={() => handleDateSelect('Mañana')}
               >
-                <Text style={[
-                  styles.dateButtonText,
-                  selectedDate === 'Mañana' && styles.dateButtonTextActive
-                ]}>Mañana</Text>
+                <Text style={[styles.dateButtonText, selectedDate === 'Mañana' && styles.dateButtonTextActive]}>Mañana</Text>
               </TouchableOpacity>
-              
               <TouchableOpacity
-                style={[
-                  styles.dateButton,
-                  selectedDate === 'Otro' && styles.dateButtonActive
-                ]}
+                style={[styles.dateButton, selectedDate === 'Otro' && styles.dateButtonActive]}
                 onPress={() => handleDateSelect('Otro')}
               >
                 <Ionicons name="calendar-outline" size={20} color={selectedDate === 'Otro' ? '#FFFFFF' : '#7B61FF'} />
-                <Text style={[
-                  styles.dateButtonText,
-                  selectedDate === 'Otro' && styles.dateButtonTextActive
-                ]}>Otro</Text>
+                <Text style={[styles.dateButtonText, selectedDate === 'Otro' && styles.dateButtonTextActive]}>Otro</Text>
               </TouchableOpacity>
             </View>
-
             <TouchableOpacity
               style={styles.searchButton}
               onPress={handleSearch}
@@ -213,32 +330,36 @@ export default function HomeScreen() {
 
           <View style={styles.tripsContainer}>
             <Text style={styles.tripsTitle}>Próximo viaje</Text>
-            {upcomingTrips.map((trip) => (
-              <Pressable
-                key={trip.id}
-                style={styles.tripCard}
-              >
-                <View style={styles.tripNumberContainer}>
-                  <Text style={styles.tripNumber}>{trip.id}</Text>
-                </View>
-                <View style={styles.tripInfo}>
-                  <Text style={styles.terminalName}>{trip.terminal}</Text>
-                  <View style={styles.routeInfo}>
-                    <Text style={styles.routeLabel}>From : </Text>
-                    <Text style={styles.routeValue}>{trip.from}</Text>
+            {loading ? (
+              <ActivityIndicator size="large" color="#7B61FF" />
+            ) : error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : upcomingTrips.length > 0 ? (
+              upcomingTrips.slice(0, 3).map((trip) => (
+                <Pressable
+                  key={trip.id}
+                  style={styles.tripCard}
+                >
+                  <View style={styles.tripInfo}>
+                    <Text style={styles.terminalName}>Pasajero: {trip.nombre}</Text>
+                    <View style={styles.routeInfo}>
+                      <Text style={styles.routeLabel}>Cédula: </Text>
+                      <Text style={styles.routeValue}>{trip.cedula}</Text>
+                    </View>
+                     <View style={styles.routeInfo}>
+                      <Text style={styles.routeLabel}>Referencia de viaje: </Text>
+                      <Text style={styles.routeValue}>#{trip.hojaTrabajoId}</Text>
+                    </View>
                   </View>
-                  <View style={styles.routeInfo}>
-                    <Text style={styles.routeLabel}>to : </Text>
-                    <Text style={styles.routeValue}>{trip.to}</Text>
+                  <View style={styles.timeContainer}>
+                     <Text style={styles.departureLabel}>ID Boleto</Text>
+                    <Text style={styles.departureTime}>{trip.id}</Text>
                   </View>
-                </View>
-                <View style={styles.timeContainer}>
-                  <Text style={styles.departureLabel}>Hora de salida</Text>
-                  <Text style={styles.departureTime}>{trip.time} , {trip.day}</Text>
-                  <Text style={styles.departureDate}>{trip.date}</Text>
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              ))
+            ) : (
+              <Text style={styles.noTripsText}>No tienes viajes próximos.</Text>
+            )}
           </View>
         </LinearGradient>
       </SafeAreaView>
@@ -259,6 +380,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingTop: 40,
   },
   userInfo: {
     flexDirection: 'row',
@@ -273,29 +395,58 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#7B61FF',
+    color: '#0F172A',
   },
   notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    padding: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  menuContainer: {
+    position: 'absolute',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 8,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 5,
+    width: 200,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  menuItemText: {
+    fontSize: 16,
+    marginLeft: 12,
+    color: '#0F172A',
+  },
+  logoutText: {
+    color: '#EF4444',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
   },
   searchContainer: {
     backgroundColor: '#7B61FF',
-    borderRadius: 20,
-    margin: 16,
-    padding: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    borderRadius: 24,
+    shadowColor: '#7B61FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   inputContainer: {
     position: 'relative',
@@ -303,22 +454,32 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     fontSize: 16,
+    justifyContent: 'center',
+    height: 50,
+  },
+  inputDisabled: {
+    backgroundColor: '#E5E7EB',
+    opacity: 0.7,
+  },
+  inputText: {
     color: '#0F172A',
+    fontSize: 16,
+  },
+  placeholderText: {
+    color: '#666',
+    fontSize: 16,
   },
   swapButton: {
     position: 'absolute',
     right: 12,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-    backgroundColor: '#7B61FF',
+    top: 10,
+    backgroundColor: '#9580FF',
     borderRadius: 12,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 6,
   },
   dateContainer: {
     flexDirection: 'row',
@@ -327,73 +488,60 @@ const styles = StyleSheet.create({
   },
   dateButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 4,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 4,
   },
   dateButtonActive: {
-    backgroundColor: '#5B41FF',
+    backgroundColor: '#FFFFFF',
   },
   dateButtonText: {
-    color: '#7B61FF',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+    marginLeft: 4,
   },
   dateButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#7B61FF',
   },
   searchButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   searchButtonText: {
     color: '#7B61FF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   tripsContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    marginTop: 24,
+    flex: 1,
   },
   tripsTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0F172A',
     marginBottom: 16,
   },
   tripCard: {
-    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tripNumberContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E6F0FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  tripNumber: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#7B61FF',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   tripInfo: {
     flex: 1,
@@ -407,76 +555,71 @@ const styles = StyleSheet.create({
   routeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
   },
   routeLabel: {
-    fontSize: 14,
     color: '#64748B',
-    width: 50,
+    fontSize: 14,
   },
   routeValue: {
-    fontSize: 14,
     color: '#0F172A',
+    fontSize: 14,
     fontWeight: '500',
   },
   timeContainer: {
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   departureLabel: {
+    color: '#64748B',
     fontSize: 12,
-    color: '#FFFFFF',
-    marginBottom: 4,
   },
   departureTime: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 2,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
   },
-  departureDate: {
-    fontSize: 12,
-    color: '#FFFFFF',
+  errorText: {
+    textAlign: 'center',
+    color: '#EF4444',
+    marginTop: 20,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  noTripsText: {
+    textAlign: 'center',
+    color: '#64748B',
+    marginTop: 20,
   },
-  menuContainer: {
-    position: 'absolute',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 8,
-    width: 200,
+  cityModalContainer: {
+    width: '90%',
+    maxHeight: '70%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowRadius: 4,
     elevation: 5,
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-  },
-  menuItemText: {
-    marginLeft: 12,
+  searchCityInput: {
+    height: 45,
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 15,
     fontSize: 16,
+  },
+  cityItem: {
+    paddingVertical: 15,
+  },
+  cityItemText: {
+    fontSize: 18,
     color: '#0F172A',
   },
-  menuDivider: {
+  citySeparator: {
     height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 4,
-  },
-  logoutText: {
-    color: '#EF4444',
-  },
+    backgroundColor: '#F3F4F6',
+  }
 });
