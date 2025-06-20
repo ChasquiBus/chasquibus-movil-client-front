@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, Stack, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -43,6 +44,7 @@ export default function LoginScreen() {
     
       // Éxito si status 2xx y hay access_token
       if (response.ok && data.access_token) {
+        await AsyncStorage.setItem('access_token', data.access_token);
         setError('');
         setShowSuccessModal(true);
         Animated.timing(successAnim, {
