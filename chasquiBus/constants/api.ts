@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-    BASE_URL: 'https://api.chasquibus.com', // Reemplazar con la URL real del backend
+    BASE_URL: 'https://chasquibus-back.onrender.com', // URL real del backend
     ENDPOINTS: {
         AUTH: {
             LOGIN: '/auth/login',
@@ -11,4 +11,6 @@ export const API_CONFIG = {
     },
 };
 
-export const getFullUrl = (endpoint: string) => `${API_CONFIG.BASE_URL}${endpoint}`; 
+export const getFullUrl = (endpoint: string) => `${API_CONFIG.BASE_URL}${endpoint}`;
+
+export const API_URL = 'http://192.168.1.6:3001'; 

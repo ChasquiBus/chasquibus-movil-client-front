@@ -1,9 +1,10 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ThemedText } from '../components/ThemedText';
 
 export default function PassengerInfoScreen() {
@@ -13,6 +14,28 @@ export default function PassengerInfoScreen() {
     { id: 1, cedula: '', nombre: '', edad: '', genero: '' },
     { id: 2, cedula: '', nombre: '', edad: '', genero: '' }
   ]);
+  const [checkingToken, setCheckingToken] = React.useState(true);
+
+  React.useEffect(() => {
+    const checkToken = async () => {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        router.replace('/(auth)/login');
+      } else {
+        setCheckingToken(false);
+      }
+    };
+    checkToken();
+  }, []);
+
+  if (checkingToken) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#7B61FF" />
+        <Text style={{ marginTop: 16, color: '#7B61FF', fontWeight: 'bold' }}>Validando sesión...</Text>
+      </View>
+    );
+  }
 
   const handleLogout = () => {
     setShowMenu(false);

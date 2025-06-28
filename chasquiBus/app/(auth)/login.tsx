@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { API_URL } from '../../constants/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -30,7 +31,7 @@ export default function LoginScreen() {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('http://192.168.1.4:3001/auth/login', {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -126,9 +127,7 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <View style={styles.passwordHeader}>
                 <Text style={styles.label}>Contraseña</Text>
-                <Link href="/(auth)/forgot-password" style={styles.forgotText}>
-                  ¿Olvidaste tu contraseña?
-                </Link>
+             
               </View>
               <View style={styles.passwordInputContainer}>
                 <TextInput

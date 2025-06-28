@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -16,8 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-const API_URL = 'http://192.168.1.4:3001';
+import { API_URL } from '../../constants/api';
 
 // Interfaces for TypeScript type safety
 interface Usuario {
@@ -61,7 +61,20 @@ export default function HomeScreen() {
   const [isToModalVisible, setToModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDate, setCustomDate] = useState(new Date());
+
+  const [allBuses, setAllBuses] = useState<any[]>([]);
+  const [loadingAll, setLoadingAll] = useState(true);
+
+  const [selectedBus, setSelectedBus] = useState<any | null>(null);
+  const [showBusModal, setShowBusModal] = useState(false);
+
+  const [checkingToken, setCheckingToken] = React.useState(true);
+
+  const [directFilter, setDirectFilter] = useState<null | boolean>(null); // null: todos, true: solo directos, false: solo indirectos
+
+  React.useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
@@ -122,19 +135,99 @@ export default function HomeScreen() {
     loadInitialData();
   }, []);
 
+  useEffect(() => {
+    const fetchAllBuses = async () => {
+      setLoadingAll(true);
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        const res = await fetch(`${API_URL}/hoja-trabajo/viajes?estado=programado`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const busesWithTarifa = await Promise.all((data.data || []).map(async (bus: any) => {
+          if (bus.rutaId) {
+            if (bus.piso_doble) {
+              const valorNormal = await fetchTarifa(bus.rutaId, 'NORMAL');
+              const valorVIP = await fetchTarifa(bus.rutaId, 'VIP');
+              return { ...bus, valorNormal, valorVIP };
+            } else {
+              const valorNormal = await fetchTarifa(bus.rutaId, 'NORMAL');
+              return { ...bus, valorNormal };
+            }
+          } else {
+            return { ...bus, valorNormal: 'N/A', valorVIP: 'N/A' };
+          }
+        }));
+        setAllBuses(busesWithTarifa);
+      } catch (e) {
+        setAllBuses([]);
+      }
+      setLoadingAll(false);
+    };
+    fetchAllBuses();
+  }, []);
+
+  useEffect(() => {
+    const checkToken = async () => {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        router.replace('/(auth)/login');
+      } else {
+        setCheckingToken(false);
+      }
+    };
+    checkToken();
+  }, []);
+
   const handleSearch = () => {
-    if (!fromLocation || !toLocation) {
+    if (!fromLocation.trim() || !toLocation.trim()) {
       alert('Por favor, ingresa el punto de salida y el destino.');
       return;
     }
+    if (fromLocation === toLocation) {
+      alert('El origen y el destino no pueden ser iguales.');
+      return;
+    }
+    
+    // Preparar la fecha para enviar a la pantalla de buses
+    let searchDate = selectedDate;
+    if (selectedDate === 'Hoy') {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      searchDate = `${year}-${month}-${day}`;
+    } else if (selectedDate === 'Mañana') {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const year = tomorrow.getFullYear();
+      const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const day = String(tomorrow.getDate()).padStart(2, '0');
+      searchDate = `${year}-${month}-${day}`;
+    }
+    
     router.push({
-      pathname: '/buses',
-      params: { from: fromLocation, to: toLocation, date: selectedDate },
+      pathname: './buses',
+      params: { from: fromLocation, to: toLocation, date: searchDate },
     });
   };
 
   const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
+    if (date === 'Otro') {
+      setShowDatePicker(true);
+    } else {
+      setSelectedDate(date);
+    }
+  };
+
+  const handleDateChange = (event: any, selected?: Date) => {
+    setShowDatePicker(false);
+    if (selected) {
+      setCustomDate(selected);
+      // Formato YYYY-MM-DD
+      const formatted = selected.toISOString().split('T')[0];
+      setSelectedDate(formatted);
+    }
   };
 
   const handleLogout = async () => {
@@ -156,6 +249,29 @@ export default function HomeScreen() {
   const openToModal = () => {
     setSearchQuery(''); // Reset search on open
     setToModalVisible(true);
+  };
+
+  // Función para formatear la fecha para mostrar
+  const formatDateForDisplay = (dateString: string) => {
+    if (dateString === 'Hoy') return 'Hoy';
+    if (dateString === 'Mañana') return 'Mañana';
+    
+    try {
+      const date = new Date(dateString);
+      const options: Intl.DateTimeFormatOptions = {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short'
+      };
+      return date.toLocaleDateString('es-ES', options);
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  const handleSwapLocations = () => {
+    setFromLocation(toLocation);
+    setToLocation(fromLocation);
   };
 
   const renderCitySelectorModal = (
@@ -188,6 +304,15 @@ export default function HomeScreen() {
       </Pressable>
     </Modal>
   );
+
+  if (checkingToken) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#7B61FF" />
+        <Text style={{ marginTop: 16, color: '#7B61FF', fontWeight: 'bold' }}>Validando sesión...</Text>
+      </View>
+    );
+  }
 
   return (
     <>
@@ -274,30 +399,79 @@ export default function HomeScreen() {
           )}
 
           <View style={styles.searchContainer}>
-            <View style={styles.inputContainer}>
+            <View style={{ position: 'relative' }}>
+              <View style={styles.inputContainer}>
+                <TouchableOpacity
+                  style={[styles.input, loading && styles.inputDisabled, { position: 'relative' }]}
+                  onPress={openFromModal}
+                  disabled={loading}
+                >
+                  <Text style={fromLocation ? styles.inputText : styles.placeholderText}>
+                    {fromLocation || 'Punto de salida'}
+                  </Text>
+                  {fromLocation && (
+                    <TouchableOpacity
+                      onPress={() => setFromLocation('')}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: [{ translateY: -10 }],
+                        padding: 4,
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#64748B" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={[styles.input, loading && styles.inputDisabled]}
-                onPress={openFromModal}
-                disabled={loading}
+                onPress={handleSwapLocations}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: [{ translateX: -20 }, { translateY: -20 }],
+                  backgroundColor: '#E6E6FF',
+                  borderRadius: 20,
+                  padding: 6,
+                  borderWidth: 2,
+                  borderColor: '#7B61FF',
+                  zIndex: 10,
+                  elevation: 6,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 6,
+                }}
               >
-                <Text style={fromLocation ? styles.inputText : styles.placeholderText}>
-                  {fromLocation || 'Punto de salida'}
-                </Text>
+                <Ionicons name="swap-vertical" size={28} color="#7B61FF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.swapButton}>
-                <Ionicons name="swap-vertical" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.inputContainer}>
-              <TouchableOpacity
-                style={[styles.input, loading && styles.inputDisabled]}
-                onPress={openToModal}
-                disabled={loading}
-              >
-                <Text style={toLocation ? styles.inputText : styles.placeholderText}>
-                  {toLocation || '¿A dónde vas?'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.inputContainer}>
+                <TouchableOpacity
+                  style={[styles.input, loading && styles.inputDisabled, { position: 'relative' }]}
+                  onPress={openToModal}
+                  disabled={loading}
+                >
+                  <Text style={toLocation ? styles.inputText : styles.placeholderText}>
+                    {toLocation || '¿A dónde vas?'}
+                  </Text>
+                  {toLocation && (
+                    <TouchableOpacity
+                      onPress={() => setToLocation('')}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: [{ translateY: -10 }],
+                        padding: 4,
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#64748B" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.dateContainer}>
               <TouchableOpacity
@@ -313,12 +487,68 @@ export default function HomeScreen() {
                 <Text style={[styles.dateButtonText, selectedDate === 'Mañana' && styles.dateButtonTextActive]}>Mañana</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.dateButton, selectedDate === 'Otro' && styles.dateButtonActive]}
+                style={[styles.dateButton, selectedDate !== 'Hoy' && selectedDate !== 'Mañana' && styles.dateButtonActive]}
                 onPress={() => handleDateSelect('Otro')}
               >
-                <Ionicons name="calendar-outline" size={20} color={selectedDate === 'Otro' ? '#FFFFFF' : '#7B61FF'} />
-                <Text style={[styles.dateButtonText, selectedDate === 'Otro' && styles.dateButtonTextActive]}>Otro</Text>
+                <Ionicons name="calendar-outline" size={20} color={selectedDate !== 'Hoy' && selectedDate !== 'Mañana' ? '#7B61FF' : '#0F172A'} style={{ marginRight: 4 }} />
+                <Text style={[styles.dateButtonText, selectedDate !== 'Hoy' && selectedDate !== 'Mañana' && styles.dateButtonTextActive]}>
+                  {selectedDate !== 'Hoy' && selectedDate !== 'Mañana' ? selectedDate : 'Otro'}
+                </Text>
               </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={customDate}
+                  mode="date"
+                  display="default"
+                  onChange={handleDateChange}
+                  minimumDate={new Date()}
+                />
+              )}
+            </View>
+            <View style={{ marginTop: 2, marginBottom: 8 }}>
+              <Text style={{ color: '#0F172A', fontWeight: 'bold', fontSize: 15, marginBottom: 4 }}>
+                Viaje Directo
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity
+                  onPress={() => setDirectFilter(true)}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginRight: 18 }}
+                >
+                  <View style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: '#7B61FF',
+                    backgroundColor: directFilter === true ? '#7B61FF' : '#fff',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 6,
+                  }}>
+                    {directFilter === true && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </View>
+                  <Text style={{ color: '#0F172A', fontSize: 14 }}>Si</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setDirectFilter(false)}
+                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                >
+                  <View style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: '#7B61FF',
+                    backgroundColor: directFilter === false ? '#7B61FF' : '#fff',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 6,
+                  }}>
+                    {directFilter === false && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </View>
+                  <Text style={{ color: '#0F172A', fontSize: 14 }}>No</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <TouchableOpacity
               style={styles.searchButton}
@@ -328,8 +558,103 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={{ marginTop: 12 }}>
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '700',
+              color: '#0F172A',
+              marginBottom: 16,
+              alignSelf: 'center'
+            }}>
+              Próximos buses programados
+            </Text>
+            {loadingAll ? (
+              <ActivityIndicator size="large" color="#7B61FF" />
+            ) : allBuses.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#64748B' }}>No hay buses programados.</Text>
+            ) : (
+              <FlatList
+                data={directFilter === null ? allBuses : allBuses.filter(bus => bus.directo === directFilter)}
+                keyExtractor={item => item.id.toString()}
+                renderItem={({ item: bus, index }: { item: any; index: number }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedBus(bus);
+                      setShowBusModal(true);
+                    }}
+                  >
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'stretch',
+                      backgroundColor: '#fff',
+                      borderRadius: 20,
+                      marginBottom: 18,
+                      marginHorizontal: 8,
+                      shadowColor: '#7B61FF',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 10,
+                      elevation: 6,
+                      minHeight: 90,
+                      maxHeight: 110,
+                    }}>
+                      {/* Número grande a la izquierda */}
+                      <View style={{
+                        backgroundColor: '#7B61FF',
+                        borderTopLeftRadius: 20,
+                        borderBottomLeftRadius: 20,
+                        width: 60,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <Text style={{ color: '#fff', fontSize: 28, fontWeight: 'bold' }}>{index + 1}</Text>
+                      </View>
+                      {/* Centro: datos del bus */}
+                      <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
+                        <Text style={{ fontWeight: '700', fontSize: 16, color: '#0F172A', marginBottom: 2 }}>{bus.nombre_cooperativa || 'Bus terminal'}</Text>
+                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Origen : <Text style={{ color: '#0F172A' }}>{bus.ciudad_origen}</Text></Text>
+                        <Text style={{ color: '#64748B', fontSize: 13 }}>Destino : <Text style={{ color: '#0F172A' }}>{bus.ciudad_destino}</Text></Text>
+                      </View>
+                      {/* Derecha: bloque negro con hora y fecha y TARIFA */}
+                      <View style={{
+                        backgroundColor: '#0F172A',
+                        borderTopRightRadius: 20,
+                        borderBottomRightRadius: 20,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingHorizontal: 18,
+                        minWidth: 110,
+                      }}>
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>Hora de salida</Text>
+                        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>
+                          {formatTime(bus.horaSalidaProg)}
+                        </Text>
+                        <Text style={{ color: '#fff', fontSize: 13 }}>
+                          {formatDateBlock(bus.fechaSalida)}
+                        </Text>
+                        {/* TARIFA */}
+                        {bus.piso_doble ? (
+                          <View style={{ marginTop: 4 }}>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>Normal: {bus.valorNormal} $</Text>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>VIP: {bus.valorVIP} $</Text>
+                          </View>
+                        ) : (
+                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>{bus.valorNormal} $</Text>
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: 330, borderRadius: 24, paddingBottom: 8 }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+              />
+            )}
+          </View>
+
           <View style={styles.tripsContainer}>
-            <Text style={styles.tripsTitle}>Próximo viaje</Text>
+            
             {loading ? (
               <ActivityIndicator size="large" color="#7B61FF" />
             ) : error ? (
@@ -358,11 +683,86 @@ export default function HomeScreen() {
                 </Pressable>
               ))
             ) : (
-              <Text style={styles.noTripsText}>No tienes viajes próximos.</Text>
+              <Text style={styles.noTripsText}>ChasquiBus tu mejor elección.</Text>
             )}
           </View>
         </LinearGradient>
       </SafeAreaView>
+      {/* Modal de detalles del bus */}
+      <Modal
+        visible={showBusModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBusModal(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.35)',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+          onPress={() => setShowBusModal(false)}
+        >
+          <View style={{
+            backgroundColor: '#fff',
+            borderRadius: 24,
+            padding: 24,
+            width: '85%',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.18,
+            shadowRadius: 16,
+            elevation: 12,
+            alignItems: 'center'
+          }}>
+            {selectedBus?.imagen ? (
+              <Image source={{ uri: selectedBus.imagen }} style={{ width: 180, height: 100, borderRadius: 16, marginBottom: 12 }} />
+            ) : null}
+            {selectedBus?.cooperativa?.logo ? (
+              <Image source={{ uri: selectedBus.cooperativa.logo }} style={{ width: 48, height: 48, borderRadius: 12, marginBottom: 8 }} />
+            ) : selectedBus?.logo ? (
+              <Image source={{ uri: selectedBus.logo }} style={{ width: 48, height: 48, borderRadius: 12, marginBottom: 8 }} />
+            ) : null}
+            <Text style={{ fontWeight: '700', fontSize: 18, color: '#7B61FF', marginBottom: 4 }}>
+              {selectedBus?.nombre_cooperativa || 'Bus terminal'}
+            </Text>
+            <Text style={{ color: '#0F172A', fontSize: 16, marginBottom: 8 }}>
+              {selectedBus?.codigo || `Viaje #${selectedBus?.id}`}
+            </Text>
+            <Text style={{ color: '#64748B', fontSize: 15, marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600' }}>Origen:</Text> {selectedBus?.ciudad_origen}{"\n"}
+              <Text style={{ fontWeight: '600' }}>Destino:</Text> {selectedBus?.ciudad_destino}
+            </Text>
+            <Text style={{ color: '#0F172A', fontSize: 15, marginBottom: 8 }}>
+              {selectedBus?.piso_doble ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6E6FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' }}>
+                  <Ionicons name="bus" size={18} color="#7B61FF" style={{ marginRight: 6 }} />
+                  <Text style={{ color: '#7B61FF', fontWeight: 'bold', fontSize: 15 }}>Doble piso</Text>
+                </View>
+              ) : (
+                'Piso normal'
+              )}
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#7B61FF',
+                borderRadius: 14,
+                paddingVertical: 12,
+                paddingHorizontal: 32,
+                marginTop: 12
+              }}
+              onPress={() => {
+                setShowBusModal(false);
+                // Aquí navega a la pantalla de compra o selección de asiento
+                // router.push({ pathname: '/compra', params: { busId: selectedBus.id, ... } });
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Escoger asientos</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -623,3 +1023,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   }
 });
+
+// Helpers para formatear hora y fecha
+function formatTime(hora: string): string {
+  if (!hora) return '';
+  const [h, m] = hora.split(':');
+  let hour = parseInt(h);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  if (hour > 12) hour -= 12;
+  if (hour === 0) hour = 12;
+  return `${hour} ${ampm}`;
+}
+function formatDateBlock(fecha: string): string {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${day} ${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// --- FUNCION PARA OBTENER TARIFA ---
+const fetchTarifa = async (rutaId: any, tipoAsiento = 'NORMAL') => {
+  try {
+    const token = await AsyncStorage.getItem('access_token');
+    const res = await fetch(`${API_URL}/tarifas-paradas/ruta/${rutaId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    let tarifaNormal = data.find((t: any) => t.tipoAsiento === tipoAsiento && Number(t.valor) > 0);
+    if (!tarifaNormal) {
+      tarifaNormal = data.find((t: any) => t.tipoAsiento === tipoAsiento);
+    }
+    let tarifaVIP = data.find((t: any) => t.tipoAsiento === 'VIP' && Number(t.valor) > 0);
+    return tarifaNormal ? tarifaNormal.valor : 'N/A';
+  } catch (e) {
+    return 'N/A';
+  }
+};

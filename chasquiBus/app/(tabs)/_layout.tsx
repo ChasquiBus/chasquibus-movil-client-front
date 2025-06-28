@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -35,14 +34,7 @@ export default function TabLayout() {
         options={{
           title: 'Inicio',
           tabBarIcon: ({ color, focused }) => (
-            <View style={{
-              backgroundColor: focused ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)',
-              padding: 12,
-              borderRadius: 24,
-              transform: [{ scale: focused ? 1.1 : 1 }],
-            }}>
-              <Ionicons name="home-outline" size={24} color={color} />
-            </View>
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={26} color={color} />
           ),
         }}
       />
@@ -51,14 +43,7 @@ export default function TabLayout() {
         options={{
           title: 'Tickets',
           tabBarIcon: ({ color, focused }) => (
-            <View style={{
-              backgroundColor: focused ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)',
-              padding: 12,
-              borderRadius: 24,
-              transform: [{ scale: focused ? 1.1 : 1 }],
-            }}>
-              <Ionicons name="ticket-outline" size={24} color={color} />
-            </View>
+            <Ionicons name={focused ? 'ticket' : 'ticket-outline'} size={26} color={color} />
           ),
         }}
       />
@@ -67,14 +52,7 @@ export default function TabLayout() {
         options={{
           title: 'Perfil',
           tabBarIcon: ({ color, focused }) => (
-            <View style={{
-              backgroundColor: focused ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)',
-              padding: 12,
-              borderRadius: 24,
-              transform: [{ scale: focused ? 1.1 : 1 }],
-            }}>
-              <Ionicons name="person-outline" size={24} color={color} />
-            </View>
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} />
           ),
         }}
       />
