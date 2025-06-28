@@ -1,25 +1,136 @@
+// Este archivo será movido fuera de (tabs) para que no aparezca como tab.
+
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
+    FlatList,
     Image,
     Modal,
     Pressable,
     SafeAreaView,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { API_URL } from '../constants/api';
+
+interface Usuario {
+  id: number;
+  nombre: string;
+  email: string;
+  cedula: string;
+}
+interface UserInfo {
+  id: number;
+  usuario: Usuario;
+}
 
 export default function BusSelectionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [showMenu, setShowMenu] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [buses, setBuses] = useState<any[]>([]);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [selectedBus, setSelectedBus] = useState<any | null>(null);
+  const [showBusModal, setShowBusModal] = useState(false);
+  const [checkingToken, setCheckingToken] = React.useState(true);
 
-  const handleLogout = () => {
+  // Recibe los parámetros de búsqueda
+  const from = params.from as string;
+  const to = params.to as string;
+  const date = params.date as string;
+
+  // Mapeo de nombres de ciudades a códigos
+  const cityCodeMap: { [key: string]: string } = {
+    'Ambato': 'AMBA',
+    'Puerto El Coca': 'ELCO',
+    'El Coca': 'ELCO',
+    'Quito': 'QUIT',
+    'Guayaquil': 'GUAY',
+    'Cuenca': 'CUEN',
+    'Manta': 'MANT',
+    'Esmeraldas': 'ESME',
+    'Machala': 'MACH',
+    'Loja': 'LOJA',
+    'Ibarra': 'IBAR',
+    'Riobamba': 'RIOB',
+    'Santo Domingo': 'SADO',
+    'Portoviejo': 'PORT',
+    'Tulcán': 'TULC',
+    'Latacunga': 'LATA',
+    'Babahoyo': 'BABA',
+    'Milagro': 'MILA',
+    'Quevedo': 'QUEV',
+    'Daule': 'DAUL',
+    'Samborondón': 'SAMB',
+    'Durán': 'DURA',
+    'Salinas': 'SALI',
+    'Playas': 'PLAY',
+    'Vinces': 'VINC',
+    'Nobol': 'NOBO',
+    'Yaguachi': 'YAGU',
+    'El Triunfo': 'TRIU',
+    'Naranjal': 'NARA',
+    'Balao': 'BALA',
+    'El Guabo': 'GUAB',
+    'Pasaje': 'PASA',
+    'Santa Rosa': 'SROS',
+    'Huaquillas': 'HUAQ',
+    'Zaruma': 'ZARU',
+    'Piñas': 'PIÑA',
+    'Atahualpa': 'ATAH',
+    'Chilla': 'CHIL',
+    'Arenillas': 'AREN',
+    'Las Lajas': 'LLAJ',
+    'Catamayo': 'CATA',
+    'Cariamanga': 'CARI',
+    'Gonzanamá': 'GONZ',
+    'Calvas': 'CALV',
+    'Paltas': 'PALT',
+    'Puyango': 'PUYA',
+    'Saraguro': 'SARA',
+    'Yacuambi': 'YACU',
+    'Zamora': 'ZAMO',
+    'Yantzaza': 'YANT',
+    'Gualaquiza': 'GUAL',
+    'Nangaritza': 'NANG',
+    'Centinela del Cóndor': 'CENT',
+    'El Pangui': 'PANG',
+    'Palanda': 'PALA',
+    'Chinchipe': 'CHIN',
+    'Pucará': 'PUCA',
+    'Oña': 'OÑA',
+    'Paute': 'PAUT',
+    'Gualaceo': 'GUAL',
+    'Chordeleg': 'CHOR',
+    'El Pan': 'ELPA',
+    'Sevilla de Oro': 'SEVI',
+    'Guachapala': 'GUAC',
+    'Camilo Ponce Enríquez': 'CAMI',
+    'Girón': 'GIRÓ',
+    'San Fernando': 'SAFE',
+    'Santa Isabel': 'SAIS',
+    'Pindal': 'PIND',
+    'Quilanga': 'QUIL',
+    'Olmedo': 'OLME',
+    'Celica': 'CELI',
+    'Pózul': 'PÓZU',
+    'Macará': 'MACA',
+    'Sozoranga': 'SOZO',
+    'Zapotillo': 'ZAPO',
+    'Alamor': 'ALAM',
+  };
+
+  const handleLogout = async () => {
     setShowMenu(false);
+    await AsyncStorage.removeItem('access_token');
     router.replace('/(auth)/login');
   };
 
@@ -28,94 +139,197 @@ export default function BusSelectionScreen() {
     router.push('/tickets');
   };
 
-  const buses = [
-    {
-      id: 1,
-      company: 'El Dorado',
-      type: 'A/C Sleeper (2+2)',
-      departure: '9:00 AM',
-      arrival: '9:45 AM',
-      duration: '45 Min',
-      price: 4,
-      seatsLeft: 15,
-      features: ['wifi', 'ac', 'usb', 'food'],
-    },
-    {
-      id: 2,
-      company: '22 de Julio',
-      type: 'A/C Sleeper (2+2)',
-      departure: '9:00 AM',
-      arrival: '9:20 AM',
-      duration: '20 Min',
-      price: 3.50,
-      seatsLeft: 2,
-      features: ['wifi', 'ac', 'usb', 'food'],
-    },
-    {
-      id: 3,
-      company: 'Amazonas',
-      type: 'Non A/C Sleeper (2+1)',
-      departure: '9:00 AM',
-      arrival: '9:45 AM',
-      duration: '45 Min',
-      price: 5,
-      seatsLeft: 5,
-      features: ['wifi', 'ac', 'usb', 'food'],
-    },
-  ];
+  // Función para formatear la fecha
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'Fecha no especificada';
+    try {
+      let date;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        const [year, month, day] = dateString.split('-').map(Number);
+        date = new Date(year, month - 1, day);
+      } else {
+        date = new Date(dateString);
+      }
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      // Comparar fechas
+      if (date.toDateString() === today.toDateString()) {
+        return 'Hoy';
+      } else if (date.toDateString() === tomorrow.toDateString()) {
+        return 'Mañana';
+      } else {
+        // Formato: "Lunes, 15 de Enero"
+        const options: Intl.DateTimeFormatOptions = {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long'
+        };
+        return date.toLocaleDateString('es-ES', options);
+      }
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  // Helpers para formato de hora y fecha
+  function formatTime(hora: string): string {
+    if (!hora) return '';
+    const [h, m] = hora.split(':');
+    let hour = parseInt(h);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    if (hour > 12) hour -= 12;
+    if (hour === 0) hour = 12;
+    return `${hour} ${ampm}`;
+  }
+  function formatDateBlock(fecha: string): string {
+    if (!fecha) return '';
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) return;
+      const profileResponse = await fetch(`${API_URL}/clientes/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (profileResponse.ok) {
+        const profileData: UserInfo = await profileResponse.json();
+        setUserInfo(profileData);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  // Función para obtener la tarifa
+  const fetchTarifa = async (rutaId: number, tipoAsiento: string = 'NORMAL') => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      const res = await fetch(`${API_URL}/tarifas-paradas/ruta/${rutaId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      console.log('Tarifas devueltas para ruta', rutaId, 'y tipo', tipoAsiento, ':', data);
+      // Primero intenta encontrar tarifa con valor > 0
+      let tarifa = data.find((t: any) => t.tipoAsiento === tipoAsiento && Number(t.valor) > 0);
+      // Si no hay, toma la tarifa con valor 0 si existe
+      if (!tarifa) {
+        tarifa = data.find((t: any) => t.tipoAsiento === tipoAsiento);
+      }
+      return tarifa ? tarifa.valor : 'N/A';
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
+  useEffect(() => {
+    const fetchBuses = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        if (!token) {
+          router.replace('/(auth)/login');
+          return;
+        }
+        // Mapear nombres a códigos
+        const fromCode = cityCodeMap[from] || from;
+        const toCode = cityCodeMap[to] || to;
+        // Obtener todos los viajes programados
+        const url = `${API_URL}/hoja-trabajo/viajes?estado=programado`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        // Filtrar por ciudad_origen y ciudad_destino
+        const filtered = (data.data || []).filter(
+          (item) =>
+            item.ciudad_origen?.toLowerCase() === from?.toLowerCase() &&
+            item.ciudad_destino?.toLowerCase() === to?.toLowerCase()
+        );
+        // Obtener tarifa para cada bus
+        const busesWithTarifa = await Promise.all(filtered.map(async (bus: any) => {
+          if (bus.rutaId) {
+            if (bus.piso_doble) {
+              // Doble piso: busca ambas tarifas
+              const valorNormal = await fetchTarifa(bus.rutaId, 'NORMAL');
+              const valorVIP = await fetchTarifa(bus.rutaId, 'VIP');
+              return { ...bus, valorNormal, valorVIP };
+            } else {
+              // Un solo piso: busca solo la tarifa NORMAL
+              const valorNormal = await fetchTarifa(bus.rutaId, 'NORMAL');
+              return { ...bus, valorNormal };
+            }
+          } else {
+            return { ...bus, valorNormal: 'N/A', valorVIP: 'N/A' };
+          }
+        }));
+        setBuses(busesWithTarifa);
+      } catch (e) {
+        setError('Error al buscar buses');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBuses();
+  }, [router, from, to, date]);
+
+  React.useEffect(() => {
+    const checkToken = async () => {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) {
+        router.replace('/(auth)/login');
+      } else {
+        setCheckingToken(false);
+      }
+    };
+    checkToken();
+  }, []);
+
+  if (checkingToken) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#7B61FF" />
+        <Text style={{ marginTop: 16, color: '#7B61FF', fontWeight: 'bold' }}>Validando sesión...</Text>
+      </View>
+    );
+  }
 
   return (
     <>
-      <Stack.Screen 
-        options={{
-          headerShown: true,
-          title: 'Selección de Bus',
-          headerStyle: {
-            backgroundColor: '#E6F0FF',
-          },
-          headerShadowVisible: false,
-          headerTintColor: '#0F172A',
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{ paddingLeft: 16 }}
-              accessibilityLabel="Volver"
-            >
-              <Ionicons name="arrow-back" size={24} color="#0F172A" />
-            </TouchableOpacity>
-          ),
-        }} 
-      />
+      <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container}>
         <LinearGradient
           colors={['#E6F0FF', '#FFFFFF']}
           locations={[0, 0.2]}
-          style={styles.gradient}
+          style={{ flex: 1 }}
         >
-          <View style={styles.header}>
+          {/* Header superior con retroceso */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginTop: 0 }}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-back-outline" size={28} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+          {/* Header superior */}
+          <View style={[styles.header, { marginTop: 0, paddingTop: 0 }]}>
             <View style={styles.userInfo}>
               <TouchableOpacity onPress={() => setShowMenu(!showMenu)}>
                 <Image
-                  source={require('../assets/images/avatar.png')}
+                  source={require('../assets/images/welcome.jpg')}
                   style={styles.avatar}
                 />
               </TouchableOpacity>
-              <View>
-                <Text style={styles.greeting}>Hola Saduni Silva!</Text>
-                <Text style={styles.subtitle}>Selecciona tu autobús</Text>
-              </View>
+              <Text style={styles.welcomeText}>
+                {userInfo ? `Hola, ${userInfo.usuario.nombre}` : 'Hola, Cliente!'}
+              </Text>
             </View>
-            <View style={styles.headerButtons}>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="filter" size={24} color="#0F172A" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconButton}>
-                <Ionicons name="notifications-outline" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color="#0F172A" />
+            </TouchableOpacity>
           </View>
-
-          {/* Menu desplegable */}
+          {/* Menú modal */}
           <Modal
             visible={showMenu}
             transparent={true}
@@ -126,10 +340,7 @@ export default function BusSelectionScreen() {
               style={styles.modalOverlay}
               onPress={() => setShowMenu(false)}
             >
-              <View style={[styles.menuContainer, {
-                top: 70,
-                left: 16,
-              }]}>
+              <View style={[styles.menuContainer, { top: 70, left: 16 }]}> 
                 <TouchableOpacity 
                   style={styles.menuItem}
                   onPress={handleViewReservations}
@@ -137,9 +348,7 @@ export default function BusSelectionScreen() {
                   <Ionicons name="ticket-outline" size={20} color="#0F172A" />
                   <Text style={styles.menuItemText}>Mis Reservas</Text>
                 </TouchableOpacity>
-                
                 <View style={styles.menuDivider} />
-                
                 <TouchableOpacity 
                   style={styles.menuItem}
                   onPress={handleLogout}
@@ -152,91 +361,171 @@ export default function BusSelectionScreen() {
               </View>
             </Pressable>
           </Modal>
-
-          <View style={styles.routeCard}>
-            <View style={styles.routeInfo}>
-              <View style={styles.locationContainer}>
-                <Ionicons name="home-outline" size={24} color="#FFFFFF" />
-                <Text style={styles.locationText}>Ambato</Text>
+          {/* Header visual de ciudades y fecha */}
+          <View style={styles.headerBox}>
+            <View style={styles.citiesRow}>
+              <View style={styles.cityItem}>
+                <Ionicons name="home-outline" size={22} color="#fff" style={styles.cityIcon} />
+                <Text style={styles.cityText}>{from}</Text>
               </View>
-              <View style={styles.swapIconContainer}>
-                <Ionicons name="bus-outline" size={28} color="#7B61FF" style={{ transform: [{ scaleX: -1 }] }} />
+              <View style={styles.busCircle}>
+                <Ionicons name="bus" size={32} color="#7B61FF" />
               </View>
-              <View style={styles.locationContainer}>
-                <Ionicons name="location-outline" size={24} color="#FFFFFF" />
-                <Text style={styles.locationText}>Quito</Text>
+              <View style={styles.cityItem}>
+                <Ionicons name="location-outline" size={22} color="#fff" style={styles.cityIcon} />
+                <Text style={styles.cityText}>{to}</Text>
               </View>
             </View>
-            <View style={styles.dateContainer}>
-              <Text style={styles.dateText}>
-                08 de diciembre de 2024 | Domingo
-              </Text>
+            <View style={styles.dateBox}>
+              <Text style={styles.dateText}>{formatDate(date)}</Text>
             </View>
           </View>
-
-          <ScrollView style={styles.busListContainer}>
-            {buses.map((bus) => (
-              <TouchableOpacity
-                key={bus.id}
-                style={styles.busCard}
-                onPress={() => {
-                  console.log('Selected bus:', bus.id);
-                  router.push({
-                    pathname: '/seat-selection',
-                    params: {
-                      busId: bus.id,
-                      company: bus.company,
-                      type: bus.type,
-                      departure: bus.departure,
-                      arrival: bus.arrival,
-                      duration: bus.duration,
-                      price: bus.price,
-                      seatsLeft: bus.seatsLeft
-                    }
-                  });
-                }}
-              >
-                <View style={styles.busHeader}>
-                  <Text style={styles.companyName}>{bus.company}</Text>
-                  <Text style={styles.price}>{bus.price} $</Text>
-                </View>
-                <Text style={styles.busType}>{bus.type}</Text>
-                
-                <View style={styles.timeContainer}>
-                  <View style={styles.timeInfo}>
-                    <Text style={styles.time}>{bus.departure}</Text>
-                    <Text style={styles.duration}>{bus.duration}</Text>
-                    <Text style={styles.time}>{bus.arrival}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.bottomContainer}>
-                  <Text style={[
-                    styles.seatsLeft,
-                    bus.seatsLeft <= 2 ? styles.seatsWarning : styles.seatsNormal
-                  ]}>
-                    Quedan {bus.seatsLeft} asientos
-                  </Text>
-                  <View style={styles.features}>
-                    {bus.features.map((feature, index) => (
-                      <Ionicons
-                        key={index}
-                        name={
-                          feature === 'wifi' ? 'wifi' :
-                          feature === 'ac' ? 'snow' :
-                          feature === 'usb' ? 'phone-portrait' :
-                          'restaurant'
-                        }
-                        size={20}
-                        color="#64748B"
-                        style={styles.featureIcon}
-                      />
-                    ))}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* Lista de buses */}
+          {loading ? (
+            <ActivityIndicator size="large" color="#7B61FF" style={{ marginTop: 40 }} />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : buses.length === 0 ? (
+            <Text style={styles.noBusesText}>No hay buses disponibles para esta ruta y fecha.</Text>
+          ) : (
+            <FlatList
+              data={buses}
+              keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item, index }: { item: any; index: number }) => {
+                // Calcular duración si es posible
+                let duracion = 'N/A';
+                if (item.horaSalidaProg && item.horaLlegadaProg) {
+                  const [h1, m1] = item.horaSalidaProg.split(':').map(Number);
+                  const [h2, m2] = item.horaLlegadaProg.split(':').map(Number);
+                  let min = (h2 * 60 + m2) - (h1 * 60 + m1);
+                  if (min < 0) min += 24 * 60;
+                  duracion = `${Math.floor(min / 60)}h ${min % 60}m`;
+                }
+                // Precio/tarifa
+                let precio = 'N/A';
+                if (item.piso_doble) {
+                  precio = `Normal: ${item.valorNormal} $\nVIP: ${item.valorVIP} $`;
+                } else {
+                  precio = `${item.valorNormal} $`;
+                }
+                // Nombre del bus
+                const nombreBus = item.placa || item.numero_bus || 'N/A';
+                // Horario
+                const horaInicio = item.horaSalidaProg ? item.horaSalidaProg.slice(0,5) : 'N/A';
+                const horaFin = item.horaLlegadaProg ? item.horaLlegadaProg.slice(0,5) : 'N/A';
+                // Servicios (mock icons)
+                const servicios = [
+                  { icon: 'snow-outline', color: '#64748B' }, // aire acondicionado
+                  { icon: 'wifi-outline', color: '#64748B' }, // wifi
+                  { icon: 'pricetag-outline', color: '#64748B' }, // ticket
+                  { icon: 'log-in-outline', color: '#64748B' }, // entrada (icono válido de Ionicons)
+                ];
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedBus(item);
+                      setShowBusModal(true);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={{
+                      backgroundColor: '#fff',
+                      borderRadius: 16,
+                      marginBottom: 16,
+                      padding: 18,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 8,
+                      elevation: 2,
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                    }}>
+                      {/* Centro: datos del bus */}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 19, fontWeight: '600', color: '#222', marginBottom: 2 }}>{item.nombre_cooperativa || 'N/A'}</Text>
+                        <Text style={{ fontSize: 15, color: '#64748B', marginBottom: 4 }}>{nombreBus}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                          <Text style={{ fontWeight: 'bold', fontSize: 15, color: '#222' }}>{horaInicio}</Text>
+                          <Text style={{ color: '#64748B', fontSize: 15, marginHorizontal: 6 }}>—</Text>
+                          <Text style={{ fontWeight: 'bold', fontSize: 15, color: '#222' }}>{horaFin}</Text>
+                        </View>
+                        <Text style={{ color: '#222', fontSize: 15, marginBottom: 2 }}>
+                          {duracion !== 'N/A' ? duracion.replace('h', 'h ') : 'N/A'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                          {servicios.map((s, i) => (
+                            <Ionicons key={i} name={s.icon} size={18} color={s.color} style={{ marginRight: 10 }} />
+                          ))}
+                        </View>
+                      </View>
+                      {/* Derecha: precio y duración */}
+                      <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', minWidth: 90 }}>
+                        {item.piso_doble ? (
+                          <View>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 18 }}>Normal: {item.valorNormal} $</Text>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 18 }}>VIP: {item.valorVIP} $</Text>
+                          </View>
+                        ) : (
+                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 24, marginBottom: 2 }}>{item.valorNormal} $</Text>
+                        )}
+                        <Text style={{ color: '#222', fontWeight: '500', fontSize: 16 }}>{duracion !== 'N/A' ? duracion.replace('h', 'h ') : 'N/A'}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+              style={{ borderRadius: 24, paddingBottom: 8 }}
+            />
+          )}
+          {/* Modal de detalles del bus */}
+          <Modal
+            visible={showBusModal}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowBusModal(false)}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => setShowBusModal(false)}
+            >
+              <View style={styles.busModalBox}>
+                {selectedBus?.imagen ? (
+                  <Image source={{ uri: selectedBus.imagen }} style={styles.busModalImage} />
+                ) : null}
+                {selectedBus?.cooperativa?.logo ? (
+                  <Image source={{ uri: selectedBus.cooperativa.logo }} style={styles.busModalLogo} />
+                ) : selectedBus?.logo ? (
+                  <Image source={{ uri: selectedBus.logo }} style={styles.busModalLogo} />
+                ) : null}
+                <Text style={styles.busModalTitle}>{selectedBus?.nombre_cooperativa || 'Bus terminal'}</Text>
+                <Text style={styles.busModalCode}>{selectedBus?.codigo || `Viaje #${selectedBus?.id}`}</Text>
+                <Text style={styles.busModalRoute}><Text style={{ fontWeight: '600' }}>Origen:</Text> {selectedBus?.ciudad_origen}{"\n"}<Text style={{ fontWeight: '600' }}>Destino:</Text> {selectedBus?.ciudad_destino}</Text>
+                <Text style={styles.busModalType}>
+                  {selectedBus?.piso_doble ? (
+                    <View style={styles.busModalDoubleFloor}>
+                      <Ionicons name="bus" size={18} color="#7B61FF" style={{ marginRight: 6 }} />
+                      <Text style={styles.busModalDoubleFloorText}>Doble piso</Text>
+                    </View>
+                  ) : (
+                    'Piso normal'
+                  )}
+                </Text>
+                <TouchableOpacity
+                  style={styles.busModalButton}
+                  onPress={() => {
+                    setShowBusModal(false);
+                    // Aquí navega a la pantalla de compra o selección de asiento
+                    // router.push({ pathname: '/compra', params: { busId: selectedBus.id, ... } });
+                  }}
+                >
+                  <Text style={styles.busModalButtonText}>Escoger asientos</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Modal>
         </LinearGradient>
       </SafeAreaView>
     </>
@@ -246,16 +535,14 @@ export default function BusSelectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  gradient: {
-    flex: 1,
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingTop: 40,
   },
   userInfo: {
     flexDirection: 'row',
@@ -267,206 +554,284 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 12,
   },
-  greeting: {
-    fontSize: 16,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  subtitle: {
+  welcomeText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#7B61FF',
+    color: '#0F172A',
   },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 12,
+  notificationButton: {
+    padding: 8,
   },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  routeCard: {
+  headerBox: {
     backgroundColor: '#7B61FF',
+    borderRadius: 24,
     margin: 16,
-    borderRadius: 20,
+    marginBottom: 18,
     padding: 20,
     shadowColor: '#7B61FF',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  routeInfo: {
+  citiesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  locationContainer: {
+  cityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
-  locationText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '600',
-    marginLeft: 12,
+  cityIcon: {
+    marginRight: 6,
   },
-  swapIconContainer: {
-    width: 40,
-    height: 40,
+  cityText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  swapCircle: {
+    backgroundColor: '#fff',
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    padding: 8,
+    marginHorizontal: 8,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 12,
   },
-  dateContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
-    padding: 12,
+  dateBox: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    width: '100%',
   },
   dateText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '500',
   },
-  busListContainer: {
-    flex: 1,
-    padding: 16,
+  errorText: {
+    color: '#EF4444',
+    textAlign: 'center',
+    marginTop: 32,
+    fontSize: 16,
+  },
+  noBusesText: {
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 32,
+    fontSize: 16,
+  },
+  listContent: {
+    paddingBottom: 24,
+    paddingHorizontal: 8,
   },
   busCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginBottom: 18,
+    marginHorizontal: 8,
+    shadowColor: '#7B61FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    minHeight: 90,
+    maxHeight: 110,
+  },
+  busCardNumberBox: {
+    backgroundColor: '#7B61FF',
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+    width: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  busCardNumber: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  busCardCenter: {
+    flex: 1,
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    transform: [{ translateY: 0 }],
+    justifyContent: 'center',
   },
-  busHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
-  price: {
-    fontSize: 24,
+  busCardTitle: {
     fontWeight: '700',
-    color: '#7B61FF',
-  },
-  busType: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 12,
-  },
-  timeContainer: {
-    marginBottom: 12,
-  },
-  timeInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 12,
-  },
-  time: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#0F172A',
+    marginBottom: 2,
   },
-  duration: {
-    fontSize: 14,
+  busCardSub: {
     color: '#64748B',
+    fontSize: 13,
+    marginBottom: 2,
   },
-  bottomContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  busCardRight: {
+    backgroundColor: '#0F172A',
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    minWidth: 110,
   },
-  seatsLeft: {
-    fontSize: 14,
-    fontWeight: '500',
+  busCardRightLabel: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginBottom: 2,
   },
-  seatsNormal: {
-    color: '#10B981',
+  busCardRightTime: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
-  seatsWarning: {
-    color: '#EF4444',
-  },
-  features: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  featureIcon: {
-    opacity: 0.8,
+  busCardRightDate: {
+    color: '#fff',
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   menuContainer: {
     position: 'absolute',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 8,
-    width: 200,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     elevation: 5,
+    width: 200,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   menuItemText: {
-    marginLeft: 12,
     fontSize: 16,
+    marginLeft: 12,
     color: '#0F172A',
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 4,
   },
   logoutText: {
     color: '#EF4444',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
+  },
+  busModalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+    alignItems: 'center',
+  },
+  busModalImage: {
+    width: 180,
+    height: 100,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  busModalLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  busModalTitle: {
+    fontWeight: '700',
+    fontSize: 18,
+    color: '#7B61FF',
+    marginBottom: 4,
+  },
+  busModalCode: {
+    color: '#0F172A',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  busModalRoute: {
+    color: '#64748B',
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  busModalType: {
+    color: '#0F172A',
+    fontSize: 15,
+    marginBottom: 8,
+  },
+  busModalDoubleFloor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6E6FF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  busModalDoubleFloorText: {
+    color: '#7B61FF',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  busModalButton: {
+    backgroundColor: '#7B61FF',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    marginTop: 12,
+  },
+  busModalButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  busCircle: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 12,
+    shadowColor: '#7B61FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  dateBar: {
+    backgroundColor: '#A992FF',
+    borderRadius: 12,
+    marginTop: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  dateBarText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
   },
 }); 

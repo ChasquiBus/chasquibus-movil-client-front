@@ -4,16 +4,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
-  Animated,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Animated,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import { API_URL } from '../../constants/api';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -51,6 +52,15 @@ export default function RegisterScreen() {
     return checkDigit === digits[9];
   };
 
+  const validateEcuadorianPhone = (phone: string) => {
+    return /^[0-9]{10}$/.test(phone);
+  };
+
+  const validateEmail = (email: string) => {
+    // Expresión regular básica para validar email
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
   const getAge = (birthDateString: string) => {
     if (!birthDateString) return 0;
     const today = new Date();
@@ -67,6 +77,14 @@ export default function RegisterScreen() {
     setError('');
     if (!validateEcuadorianCedula(cedula)) {
       setError('La cédula ingresada no es válida para Ecuador.');
+      return;
+    }
+    if (!validateEcuadorianPhone(telefono)) {
+      setError('El teléfono debe tener exactamente 10 dígitos.');
+      return;
+    }
+    if (!validateEmail(email)) {
+      setError('El correo electrónico no tiene un formato válido.');
       return;
     }
     const age = getAge(fechaNacimiento);
@@ -87,9 +105,8 @@ export default function RegisterScreen() {
       fechaNacimiento,
     };
     
-//tener en cuenta que el backend esta en el puerto 3001
     try {
-      const response = await fetch('http://192.168.1.4:3001/auth/register', {
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSend),
@@ -208,8 +225,9 @@ export default function RegisterScreen() {
                     style={styles.input}
                     placeholder="+593987654321"
                     value={telefono}
-                    onChangeText={setTelefono}
+                    onChangeText={text => setTelefono(text.replace(/[^0-9]/g, '').slice(0, 10))}
                     keyboardType="phone-pad"
+                    maxLength={10}
                     placeholderTextColor="#999"
                   />
                 </View>
