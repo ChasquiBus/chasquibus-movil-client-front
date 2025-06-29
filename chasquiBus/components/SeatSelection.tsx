@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface SeatProps {
   id: string;
@@ -12,6 +12,8 @@ interface SeatSelectionProps {
   seats: Array<{
     id: string;
     status: 'available' | 'reserved' | 'selected';
+    fila: number;
+    columna: number;
   }>;
   onSeatSelect: (seatId: string) => void;
   selectedFloor: 'lower' | 'upper';
@@ -127,49 +129,44 @@ const SeatSelection: React.FC<SeatSelectionProps> = ({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.busLayout}>
-          {/* Frente del bus */}
-          <View style={styles.busFront}>
-            <MaterialCommunityIcons name="steering" size={24} color="#64748B" />
-            <Text style={styles.frontText}>Frente</Text>
-          </View>
-
-          {/* Asientos */}
-          <View style={styles.seatsContainer}>
-            {rows.map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.row}>
-                {/* Asientos izquierdos */}
-                <View style={styles.sideSeats}>
-                  {row.slice(0, 2).map((seat) => (
-                    <Seat
-                      key={seat.id}
-                      id={seat.id}
-                      status={seat.status}
-                      onSelect={onSeatSelect}
-                    />
-                  ))}
-                </View>
-
-                {/* Pasillo */}
-                <View style={styles.aisle} />
-
-                {/* Asientos derechos */}
-                <View style={styles.sideSeats}>
-                  {row.slice(2, 4).map((seat) => (
-                    <Seat
-                      key={seat.id}
-                      id={seat.id}
-                      status={seat.status}
-                      onSelect={onSeatSelect}
-                    />
-                  ))}
-                </View>
-              </View>
-            ))}
-          </View>
+      <View style={styles.busLayout}>
+        {/* Frente del bus */}
+        <View style={styles.busFront}>
+          <MaterialCommunityIcons name="steering" size={24} color="#64748B" />
+          <Text style={styles.frontText}>Frente</Text>
         </View>
-      </ScrollView>
+        {/* Asientos */}
+        <View style={styles.seatsContainer}>
+          {rows.map((row, rowIndex) => (
+            <View key={rowIndex} style={styles.row}>
+              {/* Asientos izquierdos */}
+              <View style={styles.sideSeats}>
+                {row.slice(0, 2).map((seat) => (
+                  <Seat
+                    key={seat.id}
+                    id={seat.id}
+                    status={seat.status}
+                    onSelect={onSeatSelect}
+                  />
+                ))}
+              </View>
+              {/* Pasillo */}
+              <View style={styles.aisle} />
+              {/* Asientos derechos */}
+              <View style={styles.sideSeats}>
+                {row.slice(2, 4).map((seat) => (
+                  <Seat
+                    key={seat.id}
+                    id={seat.id}
+                    status={seat.status}
+                    onSelect={onSeatSelect}
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
     </View>
   );
 };
@@ -188,6 +185,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     minHeight: height * 0.5, // Asegura que el contenido ocupe al menos la mitad de la pantalla
+  },
+  seatsScrollArea: {
+    maxHeight: 320, // o el alto que prefieras
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   busFront: {
     alignItems: 'center',

@@ -74,6 +74,8 @@ export default function HomeScreen() {
 
   const [directFilter, setDirectFilter] = useState<null | boolean>(null); // null: todos, true: solo directos, false: solo indirectos
 
+  const showUserFilter = fromLocation && toLocation;
+
   React.useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -189,34 +191,20 @@ export default function HomeScreen() {
       return;
     }
     
-    // Preparar la fecha para enviar a la pantalla de buses
-    let searchDate = selectedDate;
-    if (selectedDate === 'Hoy') {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      searchDate = `${year}-${month}-${day}`;
-    } else if (selectedDate === 'Mañana') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const year = tomorrow.getFullYear();
-      const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const day = String(tomorrow.getDate()).padStart(2, '0');
-      searchDate = `${year}-${month}-${day}`;
-    }
-    
+    // Siempre pasa el string 'Hoy', 'Mañana' o la fecha seleccionada
     router.push({
       pathname: './buses',
-      params: { from: fromLocation, to: toLocation, date: searchDate },
+      params: { from: fromLocation, to: toLocation, date: selectedDate },
     });
   };
 
-  const handleDateSelect = (date: string) => {
-    if (date === 'Otro') {
-      setShowDatePicker(true);
-    } else {
+  const handleDateButton = (date: string) => {
+    setShowDatePicker(false);
+    if (date === 'Hoy' || date === 'Mañana') {
       setSelectedDate(date);
+      setCustomDate(new Date()); // Opcional: resetea la fecha personalizada
+    } else {
+      setShowDatePicker(true);
     }
   };
 
@@ -476,23 +464,17 @@ export default function HomeScreen() {
             <View style={styles.dateContainer}>
               <TouchableOpacity
                 style={[styles.dateButton, selectedDate === 'Hoy' && styles.dateButtonActive]}
-                onPress={() => handleDateSelect('Hoy')}
+                onPress={() => handleDateButton('Hoy')}
               >
                 <Text style={[styles.dateButtonText, selectedDate === 'Hoy' && styles.dateButtonTextActive]}>Hoy</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.dateButton, selectedDate === 'Mañana' && styles.dateButtonActive]}
-                onPress={() => handleDateSelect('Mañana')}
-              >
-                <Text style={[styles.dateButtonText, selectedDate === 'Mañana' && styles.dateButtonTextActive]}>Mañana</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.dateButton, selectedDate !== 'Hoy' && selectedDate !== 'Mañana' && styles.dateButtonActive]}
-                onPress={() => handleDateSelect('Otro')}
+                onPress={() => handleDateButton('Otro')}
               >
                 <Ionicons name="calendar-outline" size={20} color={selectedDate !== 'Hoy' && selectedDate !== 'Mañana' ? '#7B61FF' : '#0F172A'} style={{ marginRight: 4 }} />
                 <Text style={[styles.dateButtonText, selectedDate !== 'Hoy' && selectedDate !== 'Mañana' && styles.dateButtonTextActive]}>
-                  {selectedDate !== 'Hoy' && selectedDate !== 'Mañana' ? selectedDate : 'Otro'}
+                  Otra fecha
                 </Text>
               </TouchableOpacity>
               {showDatePicker && (
@@ -503,6 +485,12 @@ export default function HomeScreen() {
                   onChange={handleDateChange}
                   minimumDate={new Date()}
                 />
+              )}
+              {/* Mostrar la fecha personalizada solo si está seleccionada */}
+              {selectedDate !== 'Hoy' && selectedDate !== 'Mañana' && (
+                <Text style={{ color: '#7B61FF', marginLeft: 8, alignSelf: 'center', fontWeight: 'bold' }}>
+                  {formatDateForDisplay(selectedDate)}
+                </Text>
               )}
             </View>
             <View style={{ marginTop: 2, marginBottom: 8 }}>
@@ -615,6 +603,7 @@ export default function HomeScreen() {
                         <Text style={{ fontWeight: '700', fontSize: 16, color: '#0F172A', marginBottom: 2 }}>{bus.nombre_cooperativa || 'Bus terminal'}</Text>
                         <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Origen : <Text style={{ color: '#0F172A' }}>{bus.ciudad_origen}</Text></Text>
                         <Text style={{ color: '#64748B', fontSize: 13 }}>Destino : <Text style={{ color: '#0F172A' }}>{bus.ciudad_destino}</Text></Text>
+                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Fecha : <Text style={{ color: '#0F172A' }}>{bus.fechaSalida ? formatDateLong(bus.fechaSalida) : ''}</Text></Text>
                       </View>
                       {/* Derecha: bloque negro con hora y fecha y TARIFA */}
                       <View style={{
@@ -716,9 +705,12 @@ export default function HomeScreen() {
             elevation: 12,
             alignItems: 'center'
           }}>
-            {selectedBus?.imagen ? (
-              <Image source={{ uri: selectedBus.imagen }} style={{ width: 180, height: 100, borderRadius: 16, marginBottom: 12 }} />
-            ) : null}
+            {selectedBus?.imagen && (
+              <Image
+                source={{ uri: selectedBus.imagen }}
+                style={{ width: 180, height: 100, borderRadius: 16, marginBottom: 12 }}
+              />
+            )}
             {selectedBus?.cooperativa?.logo ? (
               <Image source={{ uri: selectedBus.cooperativa.logo }} style={{ width: 48, height: 48, borderRadius: 12, marginBottom: 8 }} />
             ) : selectedBus?.logo ? (
@@ -744,6 +736,18 @@ export default function HomeScreen() {
                 'Piso normal'
               )}
             </Text>
+            <Text
+              style={{
+                color: '#64748B',
+                fontSize: 15,
+                marginBottom: 8,
+                textAlign: 'center',
+                width: '100%',
+              }}
+            >
+              <Text style={{ fontWeight: '600' }}>Fecha de salida: </Text>
+              {selectedBus?.fechaSalida ? formatDateLong(selectedBus.fechaSalida) : ''}
+            </Text>
             <TouchableOpacity
               style={{
                 backgroundColor: '#7B61FF',
@@ -754,8 +758,20 @@ export default function HomeScreen() {
               }}
               onPress={() => {
                 setShowBusModal(false);
-                // Aquí navega a la pantalla de compra o selección de asiento
-                // router.push({ pathname: '/compra', params: { busId: selectedBus.id, ... } });
+                const paramsToSend = {
+                  company: selectedBus?.nombre_cooperativa || '',
+                  type: selectedBus?.piso_doble ? 'Doble piso' : 'Piso normal',
+                  origin: selectedBus?.ciudad_origen || '',
+                  destination: selectedBus?.ciudad_destino || '',
+                  departure: selectedBus?.horaSalidaProg || '',
+                  arrival: selectedBus?.horaLlegadaProg || '',
+                  duration: selectedBus?.duracion || '',
+                  price: selectedBus?.valorNormal || '',
+                  seatsLeft: selectedBus?.asientos_disponibles || 0,
+                  date: selectedBus?.fechaSalida ? formatDateBlock(selectedBus.fechaSalida) : '',
+                };
+               // console.log('Datos enviados a seat-selection:', paramsToSend);
+                router.push({ pathname: '/seat-selection', params: paramsToSend });
               }}
             >
               <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Escoger asientos</Text>
@@ -780,7 +796,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    paddingTop: 40,
+    paddingTop: 16,
   },
   userInfo: {
     flexDirection: 'row',
@@ -1059,3 +1075,14 @@ const fetchTarifa = async (rutaId: any, tipoAsiento = 'NORMAL') => {
     return 'N/A';
   }
 };
+
+function formatDateLong(fecha: string): string {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  return d.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+}

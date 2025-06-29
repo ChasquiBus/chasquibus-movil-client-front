@@ -6,16 +6,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { API_URL } from '../constants/api';
 
@@ -188,6 +188,40 @@ export default function BusSelectionScreen() {
     return d.toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
+  function formatDateLong(fecha: string): string {
+    if (!fecha) return '';
+    let d;
+    // Si el string es YYYY-MM-DD, agregar T00:00:00 para evitar desfase de zona horaria
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      d = new Date(fecha + 'T00:00:00');
+    } else {
+      d = new Date(fecha);
+    }
+    return d.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  // Helpers para comparar fechas
+  function getTodayString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  function getTomorrowString() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const year = tomorrow.getFullYear();
+    const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const day = String(tomorrow.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   useEffect(() => {
     const fetchUser = async () => {
       const token = await AsyncStorage.getItem('access_token');
@@ -211,7 +245,7 @@ export default function BusSelectionScreen() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      console.log('Tarifas devueltas para ruta', rutaId, 'y tipo', tipoAsiento, ':', data);
+    //  console.log('Tarifas devueltas para ruta', rutaId, 'y tipo', tipoAsiento, ':', data);
       // Primero intenta encontrar tarifa con valor > 0
       let tarifa = data.find((t: any) => t.tipoAsiento === tipoAsiento && Number(t.valor) > 0);
       // Si no hay, toma la tarifa con valor 0 si existe
@@ -243,11 +277,41 @@ export default function BusSelectionScreen() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        // Filtrar por ciudad_origen y ciudad_destino
+        // Filtrar por ciudad_origen, ciudad_destino y fecha
+        const toYYYYMMDD = (dateStr: string) => {
+          if (!dateStr) return '';
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+          const d = new Date(dateStr);
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+        const normalize = (str: string) => (str || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
         const filtered = (data.data || []).filter(
-          (item) =>
-            item.ciudad_origen?.toLowerCase() === from?.toLowerCase() &&
-            item.ciudad_destino?.toLowerCase() === to?.toLowerCase()
+          (item) => {
+            // LOG para depuración
+            // console.log('Comparando:', {
+            //   ciudad_origen: item.ciudad_origen,
+            //   ciudad_destino: item.ciudad_destino,
+            //   fechaSalida: item.fechaSalida,
+            //   filtro_from: from,
+            //   filtro_to: to,
+            //   filtro_date: date,
+            //   fecha_normalizada: toYYYYMMDD(item.fechaSalida),
+            //   filtro_date_normalizada: toYYYYMMDD(date)
+            // });
+            const matchesOrigin = normalize(item.ciudad_origen) === normalize(from);
+            const matchesDest = normalize(item.ciudad_destino) === normalize(to);
+            if (!matchesOrigin || !matchesDest) return false;
+            if (date === 'Hoy') {
+              return toYYYYMMDD(item.fechaSalida) === getTodayString();
+            } else if (date === 'Mañana') {
+              return toYYYYMMDD(item.fechaSalida) === getTomorrowString();
+            } else {
+              return toYYYYMMDD(item.fechaSalida) === toYYYYMMDD(date);
+            }
+          }
         );
         // Obtener tarifa para cada bus
         const busesWithTarifa = await Promise.all(filtered.map(async (bus: any) => {
@@ -306,28 +370,13 @@ export default function BusSelectionScreen() {
           locations={[0, 0.2]}
           style={{ flex: 1 }}
         >
-          {/* Header superior con retroceso */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginTop: 0 }}>
+        
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 16 }}>
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back-outline" size={28} color="#0F172A" />
             </TouchableOpacity>
-          </View>
-          {/* Header superior */}
-          <View style={[styles.header, { marginTop: 0, paddingTop: 0 }]}>
-            <View style={styles.userInfo}>
-              <TouchableOpacity onPress={() => setShowMenu(!showMenu)}>
-                <Image
-                  source={require('../assets/images/welcome.jpg')}
-                  style={styles.avatar}
-                />
-              </TouchableOpacity>
-              <Text style={styles.welcomeText}>
-                {userInfo ? `Hola, ${userInfo.usuario.nombre}` : 'Hola, Cliente!'}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons name="notifications-outline" size={24} color="#0F172A" />
-            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: '600', color: '#0F172A', textAlign: 'center', flex: 1 }}>Escoge un bus</Text>
+            <View style={{ width: 40 }} />
           </View>
           {/* Menú modal */}
           <Modal
@@ -377,7 +426,13 @@ export default function BusSelectionScreen() {
               </View>
             </View>
             <View style={styles.dateBox}>
-              <Text style={styles.dateText}>{formatDate(date)}</Text>
+              <Text style={styles.dateText}>
+                {date === 'Hoy'
+                  ? formatDateLong(getTodayString())
+                  : date === 'Mañana'
+                    ? formatDateLong(getTomorrowString())
+                    : formatDateLong(date)}
+              </Text>
             </View>
           </View>
           {/* Lista de buses */}
@@ -386,7 +441,23 @@ export default function BusSelectionScreen() {
           ) : error ? (
             <Text style={styles.errorText}>{error}</Text>
           ) : buses.length === 0 ? (
-            <Text style={styles.noBusesText}>No hay buses disponibles para esta ruta y fecha.</Text>
+            <View style={{ alignItems: 'center', marginTop: 48, padding: 24 }}>
+              <Ionicons name="bus-outline" size={64} color="#7B61FF" style={{ opacity: 0.25, marginBottom: 12 }} />
+              <Text style={{ color: '#0F172A', fontWeight: '700', fontSize: 18, marginBottom: 6, textAlign: 'center' }}>
+                No hay buses disponibles
+              </Text>
+              <Text style={{ color: '#64748B', fontSize: 15, textAlign: 'center', marginBottom: 4 }}>
+                para esta ruta y fecha.
+              </Text>
+              <Text style={{ color: '#A0AEC0', fontSize: 13, textAlign: 'center' }}>
+                Prueba cambiando la fecha o el destino.
+              </Text>
+              <Image
+                source={require('../assets/images/welcome.jpg')}
+                style={{ width: 80, height: 80, borderRadius: 40, marginTop: 18, opacity: 0.7 }}
+                resizeMode="cover"
+              />
+            </View>
           ) : (
             <FlatList
               data={buses}
@@ -425,53 +496,50 @@ export default function BusSelectionScreen() {
                 return (
                   <TouchableOpacity
                     onPress={() => {
+                      console.log('Bus seleccionado:', item);
                       setSelectedBus(item);
                       setShowBusModal(true);
                     }}
                     activeOpacity={0.85}
                   >
-                    <View style={{
-                      backgroundColor: '#fff',
-                      borderRadius: 16,
-                      marginBottom: 16,
-                      padding: 18,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.08,
-                      shadowRadius: 8,
-                      elevation: 2,
-                      flexDirection: 'row',
-                      alignItems: 'flex-start',
-                    }}>
-                      {/* Centro: datos del bus */}
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 19, fontWeight: '600', color: '#222', marginBottom: 2 }}>{item.nombre_cooperativa || 'N/A'}</Text>
-                        <Text style={{ fontSize: 15, color: '#64748B', marginBottom: 4 }}>{nombreBus}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                          <Text style={{ fontWeight: 'bold', fontSize: 15, color: '#222' }}>{horaInicio}</Text>
-                          <Text style={{ color: '#64748B', fontSize: 15, marginHorizontal: 6 }}>—</Text>
-                          <Text style={{ fontWeight: 'bold', fontSize: 15, color: '#222' }}>{horaFin}</Text>
-                        </View>
-                        <Text style={{ color: '#222', fontSize: 15, marginBottom: 2 }}>
-                          {duracion !== 'N/A' ? duracion.replace('h', 'h ') : 'N/A'}
-                        </Text>
-                        <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                          {servicios.map((s, i) => (
-                            <Ionicons key={i} name={s.icon} size={18} color={s.color} style={{ marginRight: 10 }} />
-                          ))}
-                        </View>
+                    <View style={styles.busCard}>
+                      {/* Número grande a la izquierda */}
+                      <View style={styles.busCardNumberBox}>
+                        <Text style={styles.busCardNumber}>{index + 1}</Text>
                       </View>
-                      {/* Derecha: precio y duración */}
-                      <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', minWidth: 90 }}>
+                    {/* Centro: datos del bus */}
+                      <View style={styles.busCardCenter}>
+                        <Text style={styles.busCardTitle} numberOfLines={1} ellipsizeMode='tail'>{item.nombre_cooperativa || 'Bus terminal'}</Text>
+                        <Text style={styles.busCardSub}>Origen : <Text style={{ color: '#0F172A' }}>{item.ciudad_origen}</Text></Text>
+                        <Text style={styles.busCardSub}>Destino : <Text style={{ color: '#0F172A' }}>{item.ciudad_destino}</Text></Text>
+                        <Text style={styles.busCardSub}>Fecha : <Text style={{ color: '#0F172A' }}>{item.fechaSalida ? formatDateLong(item.fechaSalida) : ''}</Text></Text>
+                      </View>
+                      {/* Derecha: bloque negro con hora, fecha y tarifa igual que en el index */}
+                      <View style={{
+                        backgroundColor: '#0F172A',
+                        borderTopRightRadius: 20,
+                        borderBottomRightRadius: 20,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingHorizontal: 18,
+                        minWidth: 110,
+                      }}>
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>Hora de salida</Text>
+                        <Text
+                          style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {item.horaSalidaProg ? formatTime(item.horaSalidaProg) : ''}
+                        </Text>
                         {item.piso_doble ? (
-                          <View>
-                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 18 }}>Normal: {item.valorNormal} $</Text>
-                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 18 }}>VIP: {item.valorVIP} $</Text>
+                          <View style={{ marginTop: 4 }}>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>Normal: {item.valorNormal} $</Text>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>VIP: {item.valorVIP} $</Text>
                           </View>
                         ) : (
-                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 24, marginBottom: 2 }}>{item.valorNormal} $</Text>
+                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>{item.valorNormal} $</Text>
                         )}
-                        <Text style={{ color: '#222', fontWeight: '500', fontSize: 16 }}>{duracion !== 'N/A' ? duracion.replace('h', 'h ') : 'N/A'}</Text>
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -500,14 +568,26 @@ export default function BusSelectionScreen() {
                 ) : selectedBus?.logo ? (
                   <Image source={{ uri: selectedBus.logo }} style={styles.busModalLogo} />
                 ) : null}
-                <Text style={styles.busModalTitle}>{selectedBus?.nombre_cooperativa || 'Bus terminal'}</Text>
-                <Text style={styles.busModalCode}>{selectedBus?.codigo || `Viaje #${selectedBus?.id}`}</Text>
-                <Text style={styles.busModalRoute}><Text style={{ fontWeight: '600' }}>Origen:</Text> {selectedBus?.ciudad_origen}{"\n"}<Text style={{ fontWeight: '600' }}>Destino:</Text> {selectedBus?.ciudad_destino}</Text>
-                <Text style={styles.busModalType}>
+                <Text style={{ fontWeight: '700', fontSize: 18, color: '#7B61FF', marginBottom: 4, textAlign: 'center', width: '100%' }}>
+                  {selectedBus?.nombre_cooperativa || 'Bus terminal'}
+                </Text>
+                <Text style={{ color: '#0F172A', fontSize: 16, marginBottom: 8, textAlign: 'center', width: '100%' }}>
+                  {selectedBus?.codigo || `Viaje #${selectedBus?.id}`}
+                </Text>
+                <Text style={{ color: '#64748B', fontSize: 15, marginBottom: 8, textAlign: 'center', width: '100%' }}>
+                  <Text style={{ fontWeight: '600' }}>Origen:</Text> {from}
+                  {"\n"}
+                  <Text style={{ fontWeight: '600' }}>Destino:</Text> {to}
+                </Text>
+                <Text style={{ color: '#64748B', fontSize: 15, marginBottom: 8, textAlign: 'center', width: '100%' }}>
+                  <Text style={{ fontWeight: '600' }}>Fecha de salida: </Text>
+                  {selectedBus?.fechaSalida ? formatDateLong(selectedBus.fechaSalida) : ''}
+                </Text>
+                <Text style={{ color: '#0F172A', fontSize: 15, marginBottom: 8, textAlign: 'center', width: '100%' }}>
                   {selectedBus?.piso_doble ? (
-                    <View style={styles.busModalDoubleFloor}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E6E6FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'center' }}>
                       <Ionicons name="bus" size={18} color="#7B61FF" style={{ marginRight: 6 }} />
-                      <Text style={styles.busModalDoubleFloorText}>Doble piso</Text>
+                      <Text style={{ color: '#7B61FF', fontWeight: 'bold', fontSize: 15 }}>Doble piso</Text>
                     </View>
                   ) : (
                     'Piso normal'
@@ -517,8 +597,21 @@ export default function BusSelectionScreen() {
                   style={styles.busModalButton}
                   onPress={() => {
                     setShowBusModal(false);
-                    // Aquí navega a la pantalla de compra o selección de asiento
-                    // router.push({ pathname: '/compra', params: { busId: selectedBus.id, ... } });
+                    const paramsToSend = {
+                      company: selectedBus?.nombre_cooperativa || '',
+                      type: selectedBus?.piso_doble ? 'Doble piso' : 'Piso normal',
+                      origin: from,
+                      destination: to,
+                      departure: selectedBus?.horaSalidaProg || '',
+                      arrival: selectedBus?.horaLlegadaProg || '',
+                      duration: selectedBus?.duracion || '',
+                      price: selectedBus?.valorNormal || '',
+                      seatsLeft: selectedBus?.asientos_disponibles || 0,
+                      date: selectedBus?.fechaSalida ? formatDateBlock(selectedBus.fechaSalida) : '',
+                      busId: selectedBus?.idBus,
+                    };
+                    console.log('Enviando a seat-selection:', paramsToSend);
+                    router.push({ pathname: '/seat-selection', params: paramsToSend });
                   }}
                 >
                   <Text style={styles.busModalButtonText}>Escoger asientos</Text>
@@ -638,7 +731,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     marginBottom: 18,
-    marginHorizontal: 8,
+    marginHorizontal: 12,
     shadowColor: '#7B61FF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -675,30 +768,6 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     marginBottom: 2,
-  },
-  busCardRight: {
-    backgroundColor: '#0F172A',
-    borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-    minWidth: 110,
-  },
-  busCardRightLabel: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  busCardRightTime: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  busCardRightDate: {
-    color: '#fff',
-    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
