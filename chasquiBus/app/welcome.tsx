@@ -51,7 +51,7 @@ export default function WelcomeScreen() {
     <>
       <Stack.Screen 
         options={{
-          headerShown: true,
+          headerShown: false,
           title: '',
           headerStyle: {
             backgroundColor: '#E6F0FF',

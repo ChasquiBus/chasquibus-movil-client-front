@@ -1,23 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import SeatSelection from '../components/SeatSelection';
+import { API_URL } from '../constants/api';
+
+function formatDateLong(fecha: string): string {
+  if (!fecha) return '';
+  const d = new Date(fecha);
+  return d.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+}
 
 export default function SeatSelectionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [selectedFloor, setSelectedFloor] = useState<'lower' | 'upper'>('lower');
+  const [asientos, setAsientos] = useState<any[]>([]);
+  const [loadingAsientos, setLoadingAsientos] = useState(true);
 
   // Use the params passed from the bus selection screen
   const tripDetails = {
-    origin: 'Ambato',
-    destination: 'Quito',
-    date: '08 de diciembre de 2024',
-    dayOfWeek: 'Domingo',
+    origin: params.origin as string || 'Ambato',
+    destination: params.destination as string || 'Quito',
+    date: typeof params.date === 'string' && params.date.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)
+      ? formatDateLong(params.date)
+      : typeof params.date === 'string'
+        ? params.date
+        : '08 de diciembre de 2024',
+    dayOfWeek: '',
     busName: params.company as string,
     busType: params.type as string,
     departureTime: params.departure as string,
@@ -27,7 +45,50 @@ export default function SeatSelectionScreen() {
     availableSeats: Number(params.seatsLeft),
   };
 
-  const handleSeatSelect = (seatId: string) => {
+  // Obtener configuración real de asientos
+  useEffect(() => {
+    const fetchAsientos = async () => {
+      setLoadingAsientos(true);
+      try {
+        const busId = params.busId || params.idBus;
+        console.log('Bus ID usado para asientos:', busId);
+        if (!busId) return;
+        
+        const token = await AsyncStorage.getItem('access_token');
+        const res = await fetch(`${API_URL}/configuracion-asientos/bus/${busId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log('Respuesta de configuracion-asientos:', data);
+        
+        // Verificar si data es un array y tomar el primer elemento
+        const configData = Array.isArray(data) ? data[0] : data;
+        
+        let posiciones = configData?.posiciones;
+        if (!posiciones && configData?.posicionesJson) {
+          posiciones = JSON.parse(configData.posicionesJson);
+        }
+        console.log('Posiciones parseadas:', posiciones);
+        setAsientos(posiciones || []);
+      } catch (e) {
+        console.log('Error al cargar asientos:', e);
+        setAsientos([]);
+      }
+      setLoadingAsientos(false);
+    };
+    fetchAsientos();
+  }, [params.busId, params.idBus]);
+
+  // Selección de asientos
+  const handleSeatSelect = (seatId: number) => {
     setSelectedSeats(prev => {
       if (prev.includes(seatId)) {
         return prev.filter(id => id !== seatId);
@@ -36,140 +97,142 @@ export default function SeatSelectionScreen() {
     });
   };
 
+  // Filtrar asientos por piso
+  const pisoActual = selectedFloor === 'lower' ? 1 : 2;
+  const asientosPiso = asientos.filter(a => a.piso === pisoActual);
+
+  // Adaptar para SeatSelection
+  const seatsForComponent = asientosPiso.map(a => ({
+    id: String(a.numeroAsiento),
+    status: selectedSeats.includes(a.numeroAsiento)
+      ? 'selected'
+      : a.ocupado === true
+        ? 'reserved'
+        : 'available',
+  })) as { id: string; status: 'selected' | 'reserved' | 'available' }[];
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#E6F0FF' }
-        }}
-      />
-      <View style={styles.container}>
-        <StatusBar style="dark" />
-        <LinearGradient
-          colors={['#E6F0FF', '#FFFFFF']}
-          locations={[0, 0.2]}
-          style={styles.gradient}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={24} color="#0F172A" />
-            </Pressable>
-            <Text style={styles.headerTitle}>Elige tu asiento</Text>
-            <View style={styles.notificationIcon}>
-              <Ionicons name="notifications-outline" size={24} color="#0F172A" />
-            </View>
-          </View>
-
-          {/* Trip Info Card */}
-          <View style={styles.tripInfoCard}>
-            <View style={styles.routeContainer}>
-              <View style={styles.locationContainer}>
-                <Ionicons name="home-outline" size={24} color="#FFFFFF" />
-                <Text style={styles.locationText}>{tripDetails.origin}</Text>
-              </View>
-              <View style={styles.swapIconContainer}>
-                <Ionicons name="bus-outline" size={28} color="#7B61FF" style={{ transform: [{ scaleX: -1 }] }} />
-              </View>
-              <View style={styles.locationContainer}>
-                <Ionicons name="location-outline" size={24} color="#FFFFFF" />
-                <Text style={styles.locationText}>{tripDetails.destination}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.dateContainer}>
-              <Text style={styles.dateText}>
-                {tripDetails.date} | {tripDetails.dayOfWeek}
-              </Text>
-            </View>
-          </View>
-
-          {/* Bus Details Card */}
-          <View style={styles.busDetailsCard}>
-            <Text style={styles.busName}>{tripDetails.busName}</Text>
-            <Text style={styles.busType}>{tripDetails.busType}</Text>
-            <View style={styles.timeInfo}>
-              <Text style={styles.time}>{tripDetails.departureTime}</Text>
-              <Text style={styles.duration}>{tripDetails.duration}</Text>
-              <Text style={styles.time}>{tripDetails.arrivalTime}</Text>
-            </View>
-            <Text style={styles.price}>{tripDetails.price}</Text>
-            <Text style={styles.availableSeats}>
-              Quedan {tripDetails.availableSeats} asientos
-            </Text>
-          </View>
-
-          {/* Seat Selection Component */}
-          <View style={styles.seatSelectionContainer}>
-            <SeatSelection
-              seats={Array.from({ length: selectedFloor === 'lower' ? 40 : 36 }, (_, i) => ({
-                id: `${selectedFloor === 'upper' ? 'U' : 'L'}${i + 1}`,
-                status: selectedSeats.includes(`${selectedFloor === 'upper' ? 'U' : 'L'}${i + 1}`) 
-                  ? 'selected' 
-                  : Math.random() > 0.7 ? 'reserved' : 'available',
-              }))}
-              onSeatSelect={handleSeatSelect}
-              selectedFloor={selectedFloor}
-              onFloorChange={setSelectedFloor}
-            />
-          </View>
-
-          {/* Continue Button */}
-          <View style={styles.bottomContainer}>
-            <Pressable
-              style={[
-                styles.continueButton,
-                { opacity: selectedSeats.length > 0 ? 1 : 0.5 }
-              ]}
-              disabled={selectedSeats.length === 0}
-              onPress={() => {
-                // Handle continue with selected seats
-                console.log('Selected seats:', selectedSeats);
-              }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={{ flex: 1, position: 'relative' }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 80 }}>
+          <Stack.Screen
+            options={{
+              headerShown: false,
+              contentStyle: { backgroundColor: '#E6F0FF' }
+            }}
+          />
+          <View style={styles.container}>
+            <StatusBar style="dark" />
+            <LinearGradient
+              colors={['#E6F0FF', '#FFFFFF']}
+              locations={[0, 0.2]}
+              style={styles.gradient}
             >
-              <Text style={styles.continueButtonText}>Continuar</Text>
-            </Pressable>
-          </View>
+              {/* Header */}
+              <View style={styles.header}>
+                <Pressable onPress={() => router.back()}>
+                  <Ionicons name="arrow-back-outline" size={28} color="#0F172A" />
+                </Pressable>
+                <Text style={styles.headerTitle}>Elige tu asiento</Text>
+                <View style={styles.notificationIcon}>
+                  <Ionicons name="notifications-outline" size={24} color="#0F172A" />
+                </View>
+              </View>
 
-          {/* Bottom Navigation Bar */}
-          <View style={styles.bottomNav}>
-            <Pressable 
-              style={[styles.navItem]} 
-              onPress={() => router.push('/')}
-            >
-              <View style={styles.navIconContainer}>
-                <Ionicons name="home-outline" size={24} color="#FFFFFF" />
+              {/* Trip Info Card */}
+              <View style={styles.tripInfoCard}>
+                <View style={styles.routeContainer}>
+                  <View style={styles.locationContainer}>
+                    <Ionicons name="home-outline" size={24} color="#FFFFFF" />
+                    <Text style={styles.locationText}>{tripDetails.origin}</Text>
+                  </View>
+                  <View style={styles.swapIconContainer}>
+                    <Ionicons name="bus-outline" size={28} color="#7B61FF" style={{ transform: [{ scaleX: -1 }] }} />
+                  </View>
+                  <View style={styles.locationContainer}>
+                    <Ionicons name="location-outline" size={24} color="#FFFFFF" />
+                    <Text style={styles.locationText}>{tripDetails.destination}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.dateContainer}>
+                  <Text style={styles.dateText}>
+                    {tripDetails.date} | {tripDetails.dayOfWeek}
+                  </Text>
+                </View>
               </View>
-            </Pressable>
-            <Pressable 
-              style={[styles.navItem]} 
-              onPress={() => router.push('/tickets')}
-            >
-              <View style={[styles.navIconContainer, styles.activeNavItem]}>
-                <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
+
+              {/* Bus Details Card */}
+              <View style={styles.busDetailsCard}>
+                <Text style={styles.busName}>{tripDetails.busName}</Text>
+                <Text style={styles.busType}>{tripDetails.busType}</Text>
+                <View style={styles.timeInfo}>
+                  <Text style={styles.time}>{tripDetails.departureTime}</Text>
+                  <Text style={styles.duration}>{tripDetails.duration}</Text>
+                  <Text style={styles.time}>{tripDetails.arrivalTime}</Text>
+                </View>
+                <Text style={styles.price}>{tripDetails.price}</Text>
+                <Text style={styles.availableSeats}>
+                  Quedan {tripDetails.availableSeats} asientos
+                </Text>
               </View>
-            </Pressable>
-            <Pressable 
-              style={[styles.navItem]} 
-              onPress={() => router.push('/profile')}
-            >
-              <View style={styles.navIconContainer}>
-                <Ionicons name="person-outline" size={24} color="#FFFFFF" />
+
+              {/* Seat Selection Component */}
+              <View style={styles.seatSelectionContainer}>
+                {loadingAsientos ? (
+                  <Text style={{ textAlign: 'center', color: '#7B61FF', marginTop: 24 }}>Cargando asientos...</Text>
+                ) : (
+                  <SeatSelection
+                    seats={seatsForComponent}
+                    onSeatSelect={id => handleSeatSelect(Number(id))}
+                    selectedFloor={selectedFloor}
+                    onFloorChange={setSelectedFloor}
+                  />
+                )}
               </View>
-            </Pressable>
+
+              {/* Continue Button */}
+              <View style={styles.bottomContainer}>
+                <Pressable
+                  style={[
+                    styles.continueButton,
+                    { opacity: selectedSeats.length > 0 ? 1 : 0.5 }
+                  ]}
+                  disabled={selectedSeats.length === 0}
+                  onPress={() => {
+                    // Handle continue with selected seats
+                    console.log('Selected seats:', selectedSeats);
+                  }}
+                >
+                  <Text style={styles.continueButtonText}>Continuar</Text>
+                </Pressable>
+              </View>
+            </LinearGradient>
           </View>
-        </LinearGradient>
+        </ScrollView>
+        <View style={[styles.bottomNav, { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10 }]}>
+          <Pressable style={styles.navItem} onPress={() => router.push('/')}> 
+            <View style={styles.navIconContainer}> 
+              <Ionicons name="home-outline" size={24} color="#FFFFFF" /> 
+            </View> 
+          </Pressable> 
+          <Pressable style={styles.navItem} onPress={() => router.push('/tickets')}> 
+            <View style={[styles.navIconContainer, styles.activeNavItem]}> 
+              <Ionicons name="ticket-outline" size={24} color="#FFFFFF" /> 
+            </View> 
+          </Pressable> 
+          <Pressable style={styles.navItem} onPress={() => router.push('/profile')}> 
+            <View style={styles.navIconContainer}> 
+              <Ionicons name="person-outline" size={24} color="#FFFFFF" /> 
+            </View> 
+          </Pressable> 
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -182,7 +245,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    paddingTop: 48,
+    paddingTop: 16,
   },
   backButton: {
     width: 40,
@@ -365,10 +428,7 @@ const styles = StyleSheet.create({
     right: 0,
     height: 70,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
