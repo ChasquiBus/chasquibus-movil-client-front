@@ -49,7 +49,7 @@ const Seat: React.FC<SeatProps> = ({ id, status, onSelect }) => {
 
   return (
     <TouchableOpacity
-      onPress={() => status === 'available' && onSelect(id)}
+      onPress={() => (status === 'available' || status === 'selected') && onSelect(id)}
       style={[
         styles.seat,
         {

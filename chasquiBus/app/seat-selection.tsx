@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import SeatSelection from '../components/SeatSelection';
 import { API_URL } from '../constants/api';
 
@@ -25,6 +26,8 @@ export default function SeatSelectionScreen() {
   const [selectedFloor, setSelectedFloor] = useState<'lower' | 'upper'>('lower');
   const [asientos, setAsientos] = useState<any[]>([]);
   const [loadingAsientos, setLoadingAsientos] = useState(true);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
 
   // Use the params passed from the bus selection screen
   const tripDetails = {
@@ -90,12 +93,28 @@ export default function SeatSelectionScreen() {
   // Selección de asientos
   const handleSeatSelect = (seatId: number) => {
     setSelectedSeats(prev => {
-      if (prev.includes(seatId)) {
-        return prev.filter(id => id !== seatId);
+      const isSelected = prev.includes(seatId);
+      let newSelection;
+      
+      if (isSelected) {
+        newSelection = prev.filter(id => id !== seatId);
+        setNotificationMessage(`Asiento ${seatId} removido`);
+      } else {
+        newSelection = [...prev, seatId];
+        setNotificationMessage(`Asiento ${seatId} seleccionado`);
       }
-      return [...prev, seatId];
+      
+      // Mostrar notificación
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 1500);
+      
+      return newSelection;
     });
   };
+
+  // Calcular precio total
+  const pricePerSeat = parseFloat(tripDetails.price.replace('$', '').trim()) || 0;
+  const totalPrice = selectedSeats.length * pricePerSeat;
 
   // Filtrar asientos por piso
   const pisoActual = selectedFloor === 'lower' ? 1 : 2;
@@ -109,7 +128,15 @@ export default function SeatSelectionScreen() {
       : a.ocupado === true
         ? 'reserved'
         : 'available',
-  })) as { id: string; status: 'selected' | 'reserved' | 'available' }[];
+    fila: a.fila,
+    columna: a.columna,
+  })) as { id: string; status: 'selected' | 'reserved' | 'available'; fila: number; columna: number }[];
+
+  useEffect(() => {
+    return () => {
+      setSelectedSeats([]);
+    };
+  }, []);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -121,6 +148,17 @@ export default function SeatSelectionScreen() {
               contentStyle: { backgroundColor: '#E6F0FF' }
             }}
           />
+          
+          {/* Notificación de selección */}
+          {showNotification && (
+            <View style={styles.notificationContainer}>
+              <View style={styles.notificationBox}>
+                <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                <Text style={styles.notificationText}>{notificationMessage}</Text>
+              </View>
+            </View>
+          )}
+          
           <View style={styles.container}>
             <StatusBar style="dark" />
             <LinearGradient
@@ -154,12 +192,6 @@ export default function SeatSelectionScreen() {
                     <Text style={styles.locationText}>{tripDetails.destination}</Text>
                   </View>
                 </View>
-                
-                <View style={styles.dateContainer}>
-                  <Text style={styles.dateText}>
-                    {tripDetails.date} | {tripDetails.dayOfWeek}
-                  </Text>
-                </View>
               </View>
 
               {/* Bus Details Card */}
@@ -171,10 +203,13 @@ export default function SeatSelectionScreen() {
                   <Text style={styles.duration}>{tripDetails.duration}</Text>
                   <Text style={styles.time}>{tripDetails.arrivalTime}</Text>
                 </View>
-                <Text style={styles.price}>{tripDetails.price}</Text>
-                <Text style={styles.availableSeats}>
-                  Quedan {tripDetails.availableSeats} asientos
+                <Text style={styles.price}>
+                  {selectedSeats.length > 0
+                    ? `${totalPrice.toFixed(2)} $`
+                    : `0.00 $`
+                  }
                 </Text>
+              
               </View>
 
               {/* Seat Selection Component */}
@@ -193,6 +228,35 @@ export default function SeatSelectionScreen() {
 
               {/* Continue Button */}
               <View style={styles.bottomContainer}>
+                {/* Información de selección */}
+                {selectedSeats.length > 0 && (
+                  <View style={styles.selectionInfo}>
+                    <View style={styles.selectionHeader}>
+                      <Text style={styles.selectionText}>
+                        {selectedSeats.length} asiento{selectedSeats.length > 1 ? 's' : ''} seleccionado{selectedSeats.length > 1 ? 's' : ''}
+                      </Text>
+                      <Text style={styles.totalPrice}>
+                        Total: ${totalPrice.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.selectedSeatsContainer}>
+                      <Text style={styles.selectedSeatsLabel}>Asientos:</Text>
+                      <View style={styles.selectedSeatsList}>
+                        {selectedSeats.map((seatId, index) => (
+                          <View key={seatId} style={styles.selectedSeatItem}>
+                            <Text style={styles.selectedSeatNumber}>{seatId}</Text>
+                            {index < selectedSeats.length - 1 && <Text style={styles.seatSeparator}>, </Text>}
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.priceBreakdown}>
+                      <Text style={styles.priceBreakdownText}>
+                        ${pricePerSeat.toFixed(2)} × {selectedSeats.length} asiento{selectedSeats.length > 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  </View>
+                )}
                 <Pressable
                   style={[
                     styles.continueButton,
@@ -200,31 +264,40 @@ export default function SeatSelectionScreen() {
                   ]}
                   disabled={selectedSeats.length === 0}
                   onPress={() => {
-                    // Handle continue with selected seats
-                    console.log('Selected seats:', selectedSeats);
+                    router.push({
+                      pathname: '/boarding-points',
+                      params: {
+                        seats: selectedSeats.join(','),
+                        total: totalPrice.toFixed(2),
+                        busId: params.busId || params.idBus,
+                        asientosData: JSON.stringify(asientos),
+                      }
+                    });
                   }}
                 >
-                  <Text style={styles.continueButtonText}>Continuar</Text>
+                  <Text style={styles.continueButtonText}>
+                    {selectedSeats.length > 0 
+                      ? `Continuar con ${selectedSeats.length} asiento${selectedSeats.length > 1 ? 's' : ''}`
+                      : 'Selecciona un asiento'
+                    }
+                  </Text>
                 </Pressable>
               </View>
             </LinearGradient>
           </View>
         </ScrollView>
         <View style={[styles.bottomNav, { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10 }]}>
-          <Pressable style={styles.navItem} onPress={() => router.push('/')}> 
-            <View style={styles.navIconContainer}> 
-              <Ionicons name="home-outline" size={24} color="#FFFFFF" /> 
-            </View> 
+          <Pressable style={styles.navItem} onPress={() => router.replace('/(tabs)')}> 
+            <Ionicons name="home-outline" size={24} color="#FFFFFF" /> 
+            <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Inicio</Text>
           </Pressable> 
           <Pressable style={styles.navItem} onPress={() => router.push('/tickets')}> 
-            <View style={[styles.navIconContainer, styles.activeNavItem]}> 
-              <Ionicons name="ticket-outline" size={24} color="#FFFFFF" /> 
-            </View> 
+            <Ionicons name="ticket-outline" size={24} color="#FFFFFF" /> 
+            <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Tickets</Text>
           </Pressable> 
           <Pressable style={styles.navItem} onPress={() => router.push('/profile')}> 
-            <View style={styles.navIconContainer}> 
-              <Ionicons name="person-outline" size={24} color="#FFFFFF" /> 
-            </View> 
+            <Ionicons name="person-outline" size={24} color="#FFFFFF" /> 
+            <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Perfil</Text>
           </Pressable> 
         </View>
       </View>
@@ -398,6 +471,55 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },
+  selectionInfo: {
+    marginBottom: 12,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  totalPrice: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  selectedSeatsContainer: {
+    marginTop: 8,
+  },
+  selectedSeatsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  selectedSeatsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  selectedSeatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedSeatNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7B61FF',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  seatSeparator: {
+    marginHorizontal: 4,
+    color: '#64748B',
+  },
   continueButton: {
     backgroundColor: '#7B61FF',
     padding: 16,
@@ -418,7 +540,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#5B41FF',
+    backgroundColor: '#7B61FF',
     paddingVertical: 12,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -438,16 +560,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  navIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
+  notificationContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 16,
+    right: 16,
+    zIndex: 1000,
     alignItems: 'center',
   },
-  activeNavItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    transform: [{ scale: 1.1 }],
+  notificationBox: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  notificationText: {
+    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  priceBreakdown: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+  },
+  priceBreakdownText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
   },
 }); 
