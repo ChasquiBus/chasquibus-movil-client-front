@@ -4,12 +4,14 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 export default function TicketsScreen() {
   const router = useRouter();
   const [checkingToken, setCheckingToken] = React.useState(true);
+  const [userName, setUserName] = useState('');
 
   React.useEffect(() => {
     const checkToken = async () => {
@@ -21,6 +23,20 @@ export default function TicketsScreen() {
       }
     };
     checkToken();
+  }, []);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = await AsyncStorage.getItem('access_token');
+      const res = await fetch(`${API_URL}/clientes/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserName(data.usuario?.nombre || '');
+      }
+    };
+    fetchUser();
   }, []);
 
   if (checkingToken) {
@@ -48,27 +64,32 @@ export default function TicketsScreen() {
           style={styles.gradient}
         >
           {/* Top Navigation */}
-          <View style={styles.topNav}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.navButton}>
-              <Ionicons name="chevron-back" size={24} color="#0F172A" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navButton} onPress={() => router.push('/login')}>
-              <Ionicons name="log-out-outline" size={24} color="#0F172A" />
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 16 }}>
+            <Pressable
+              onPress={() => router.back()}
+              style={{ padding: 0 }}
+            >
+              <Ionicons name="arrow-back-outline" size={28} color="#0F172A" />
+            </Pressable>
+            <Text style={{ fontSize: 18, fontWeight: '600', color: '#0F172A', textAlign: 'center', flex: 1 }}>
+              MIS RESERVAS
+            </Text>
+            <View style={{ width: 40 }} />
           </View>
 
           {/* Header with Avatar */}
-          <View style={styles.header}>
-            <View style={styles.userInfo}>
-              <Image
-                source={require('../../assets/images/avatar.png')}
-                style={styles.avatar}
-                contentFit="cover"
-              />
-              <View>
-                <Text style={styles.greeting}>Hola Saduni Silva!</Text>
-                <Text style={styles.subtitle}>MIS RESERVAS</Text>
-              </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 16, marginLeft: 16 }}>
+            <Image
+              source={require('../../assets/images/welcome.jpg')}
+              style={{ width: 48, height: 48, borderRadius: 24, marginRight: 12 }}
+            />
+            <View>
+              <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#0F172A' }}>
+                Hola {userName}!
+              </Text>
+              <Text style={{ color: '#7B61FF', fontWeight: 'bold', fontSize: 15 }}>
+                MIS RESERVAS
+              </Text>
             </View>
           </View>
 
@@ -94,6 +115,8 @@ export default function TicketsScreen() {
                 </View>
                 <Text style={styles.tripId}>17,18</Text>
               </View>
+              <Text style={{ marginTop: 8 }}>Código QR:</Text>
+              <QRCode value="17,18" size={120} />
             </TouchableOpacity>
           </ScrollView>
         </LinearGradient>
