@@ -79,11 +79,11 @@ export default function TicketsScreen() {
 
           {/* Header with Avatar */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 16, marginLeft: 16 }}>
-            <Image
+              <Image
               source={require('../../assets/images/welcome.jpg')}
               style={{ width: 48, height: 48, borderRadius: 24, marginRight: 12 }}
-            />
-            <View>
+              />
+              <View>
               <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#0F172A' }}>
                 Hola {userName}!
               </Text>

@@ -1,23 +1,57 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ThemedText } from '../components/ThemedText';
 import { API_URL } from '../constants/api';
+
+// Estado para los descuentos activos
+type Descuento = {
+  id: number;
+  tipoDescuento?: string;
+  tipo_descuento?: string;
+  requiereValidacion?: boolean;
+  requiere_validacion?: boolean;
+  porcentaje: string;
+  estado: string;
+};
+
+interface Passenger {
+  photo: string | null;
+  nombre: string;
+  cedula: string;
+  descuentoId: number | null;
+  totalSinDescPorPers: string;
+  totalDescPorPers: string;
+  totalPorPer: string;
+  tarifaId: number;
+}
 
 export default function BoardingPointsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const seats = typeof params.seats === 'string' ? params.seats.split(',') : [];
+  const asientosSeleccionados = typeof params.asientosSeleccionados === 'string' ? JSON.parse(params.asientosSeleccionados) : [];
+  const seats = asientosSeleccionados.map((a: any) => a.numeroAsiento);
   const total: string = typeof params.total === 'string' ? params.total : '0.00';
   const [showMenu, setShowMenu] = useState(false);
   const [checkingToken, setCheckingToken] = React.useState(true);
-  const [passengers, setPassengers] = useState(
-    seats.map(() => ({ photo: null, nombre: '', cedula: '' }))
+  const [descuentos, setDescuentos] = useState<Descuento[]>([]);
+  const precioUnitario = seats.map(() => parseFloat(total) / seats.length);
+  const [passengers, setPassengers] = useState<Passenger[]>(
+    asientosSeleccionados.map((a: any) => ({
+      photo: null,
+      nombre: '',
+      cedula: '',
+      descuentoId: null,
+      totalSinDescPorPers: a.precio.toFixed(2),
+      totalDescPorPers: '0.00',
+      totalPorPer: a.precio.toFixed(2),
+      tarifaId: a.tarifaId
+    }))
   );
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -38,6 +72,23 @@ export default function BoardingPointsScreen() {
       }
     };
     checkToken();
+    // Traer descuentos activos
+    const fetchDescuentos = async () => {
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        const response = await fetch(`${API_URL}/descuentos`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await response.json();
+        // Filtra solo los descuentos activos y que no sean 'estudiante'
+        const activos = Array.isArray(data) ? data.filter(d => d.estado === 'activo' && (d.tipoDescuento || d.tipo_descuento).toLowerCase() !== 'estudiante') : [];
+        console.log('Descuentos activos:', activos);
+        setDescuentos(activos);
+      } catch (e) {
+        setDescuentos([]);
+      }
+    };
+    fetchDescuentos();
   }, []);
 
   if (checkingToken) {
@@ -112,14 +163,14 @@ export default function BoardingPointsScreen() {
       // --- FIN CAMBIO ---
 
       const boletos = passengers.map((p, idx) => ({
-        asientoNumero: posiciones[idx]?.numeroAsiento || Number(seats[idx]),
-        tarifaId: tarifaId,
+        asientoNumero: asientosSeleccionados[idx]?.numeroAsiento,
+        tarifaId: passengers[idx].tarifaId,
         cedula: p.cedula,
         nombre: p.nombre,
-        totalSinDescPorPers: totalSinDescPorPers,
-        totalDescPorPers: totalDescPorPers,
-        totalPorPer: totalPorPer,
-        // descuentoId: ... // Si aplica
+        descuentoId: p.descuentoId,
+        totalSinDescPorPers: p.totalSinDescPorPers,
+        totalDescPorPers: p.totalDescPorPers,
+        totalPorPer: p.totalPorPer,
       }));
       const ventaPayload = {
         cooperativaId,
@@ -166,59 +217,73 @@ export default function BoardingPointsScreen() {
     }
   };
 
+  // Restaurar función de tomar foto y autocompletar ambos campos con una sola petición
   const handleOpenCamera = async (idx: number) => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     if (!permissionResult.granted) {
       alert('Se requiere permiso para acceder a la cámara');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1,
-    });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 1 });
     if (!result.canceled && result.assets && result.assets.length > 0) {
+      // Preprocesar la imagen antes de enviarla
+      const manipResult = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [
+          { resize: { width: 1000 } },
+        ],
+        { format: ImageManipulator.SaveFormat.JPEG, compress: 1 }
+      );
       const updated = [...passengers];
-      updated[idx].photo = result.assets[0].uri;
+      updated[idx].photo = manipResult.uri;
       setPassengers(updated);
-      // --- OCR: autocompletar nombre y cédula ---
       try {
         const formData = new FormData();
         formData.append('file', {
-          uri: result.assets[0].uri,
+          uri: manipResult.uri,
           type: 'image/jpeg',
           name: 'photo.jpg',
         } as any);
         const endpoint = `${API_URL}/boletos/cedula-ocr`;
-        console.log('Enviando imagen a:', endpoint);
-        console.log('FormData:', formData);
+        const token = await AsyncStorage.getItem('access_token');
         setLoading(true);
         setFeedback('Procesando cédula...');
         const response = await fetch(endpoint, {
           method: 'POST',
           body: formData,
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`,
+          },
         });
         const text = await response.text();
-        console.log('Respuesta OCR (texto):', text);
         let data;
         try {
           data = JSON.parse(text);
+          console.log('Respuesta OCR data:', data);
         } catch (e) {
           setFeedback('Respuesta no es JSON');
           setTimeout(() => setFeedback(null), 2000);
           setLoading(false);
           return;
         }
-        if (data.nombre && data.cedula) {
-          updated[idx].nombre = data.nombre;
-          updated[idx].cedula = data.cedula;
-          setPassengers([...updated]);
-          setFeedback('Datos autocompletados');
-          setTimeout(() => setFeedback(null), 1500);
-        } else {
-          setFeedback('No se pudo extraer la información');
+        if (!data.cedula || !data.nombre) {
+          setFeedback('No se pudo extraer la información. Intenta con una foto más clara.');
           setTimeout(() => setFeedback(null), 2000);
+          setLoading(false);
+          return;
         }
+        if (!/^\d{10}$/.test(data.cedula)) {
+          setFeedback('La cédula extraída no es válida. Intenta con una foto más clara.');
+          setTimeout(() => setFeedback(null), 2000);
+          setLoading(false);
+          return;
+        }
+        updated[idx].nombre = data.nombre;
+        updated[idx].cedula = data.cedula;
+        setPassengers([...updated]);
+        setFeedback('Datos autocompletados');
+        setTimeout(() => setFeedback(null), 1500);
       } catch (error: any) {
         setFeedback('Error al procesar la imagen: ' + (error?.message || error));
         setTimeout(() => setFeedback(null), 2000);
@@ -227,6 +292,9 @@ export default function BoardingPointsScreen() {
       }
     }
   };
+
+  // Calcular la tarifa total dinámica según los descuentos seleccionados
+  const totalTarifa = passengers.reduce((acc, p) => acc + parseFloat(p.totalPorPer || '0'), 0).toFixed(2);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -248,24 +316,48 @@ export default function BoardingPointsScreen() {
             <Pressable onPress={() => router.back()}>
               <Ionicons name="arrow-back-outline" size={28} color="#0F172A" />
             </Pressable>
-            <Text style={styles.headerTitle}>Datos de pasajeros</Text>
-            <View style={styles.notificationIcon} />
+            <View style={{ flex: 1, alignItems: 'center', position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', pointerEvents: 'none' }}>
+              <Text style={styles.headerTitle}>Datos de pasajeros</Text>
+            </View>
           </View>
           {/* Tarifa total */}
-          <View style={styles.fareContainer}>
-            <ThemedText style={styles.fareLabel}>Tarifa total</ThemedText>
-            <ThemedText style={styles.fareAmount}>{total} $</ThemedText>
+          <View style={[styles.fareContainer, { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginHorizontal: 8, marginTop: 20, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#E2E8F0' }]}> 
+            <Text style={{ fontSize: 16, color: '#64748B', fontWeight: '500', flex: 1 }}>Tarifa total</Text>
+            <Text style={{ fontSize: 28, color: '#0F172A', fontWeight: 'bold' }}>{totalTarifa} $</Text>
           </View>
+          {/* Detalle de descuentos por pasajero */}
+          <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, marginHorizontal: 8, marginBottom: 12, padding: 14, borderWidth: 1, borderColor: '#E2E8F0' }}>
+            <Text style={{ color: '#7B61FF', fontWeight: 'bold', marginBottom: 6 }}>Pasajeros y descuentos:</Text>
+            {passengers.map((p, idx) => {
+              const desc = descuentos.find(d => d.id === p.descuentoId);
+              return (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <Text style={{ color: '#0F172A', fontWeight: '500', minWidth: 90 }}>
+                    • Asiento {seats[idx]}:
+                  </Text>
+                  <Text style={{ color: desc ? '#7B61FF' : '#64748B', fontWeight: desc ? 'bold' : 'normal', marginLeft: 2, minWidth: 90 }}>
+                    {desc ? (desc.tipoDescuento || desc.tipo_descuento) : 'Ninguno'}
+                  </Text>
+                  <Text style={{ color: '#64748B', marginLeft: 8, minWidth: 70 }}>
+                    —  ${parseFloat(p.totalDescPorPers).toFixed(2)}
+                  </Text>
+                  <Text style={{ color: '#0F172A', fontWeight: 'bold', marginLeft: 8 }}>
+                    Total: ${parseFloat(p.totalPorPer).toFixed(2)}
+                  </Text>
+              </View>
+              );
+            })}
+            </View>
           {/* ScrollView para el formulario de pasajeros y el botón */}
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 32 }}
+            contentContainerStyle={{ paddingBottom: 120 }}
             showsVerticalScrollIndicator={false}
           >
             {/* Formulario de pasajeros */}
             {seats.length > 0 && (
               <View style={{ marginTop: 24 }}>
-                {seats.map((seat, idx) => (
+                {seats.map((seat: number | string, idx: number) => (
                   <View key={idx} style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' }}>
                     <Text style={{ fontWeight: 'bold', color: '#7B61FF', marginBottom: 8 }}>
                       Pasajero {idx + 1} (Asiento {seat})
@@ -273,7 +365,15 @@ export default function BoardingPointsScreen() {
                     <Text style={{ color: '#64748B', marginBottom: 8 }}>
                       Toma foto de cédula para llenar tus datos automáticamente (opcional)
                     </Text>
-                    <Pressable
+                    <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 8 }}>
+                      📸 Recomendaciones para una mejor lectura:
+                      {"\n• Toma la foto en un lugar bien iluminado" +
+                       "\n• Mantén la cédula plana y sin sombras" +
+                       "\n• Acércate lo suficiente para que se vea clara" +
+                       "\n• Evita reflejos en la cédula" +
+                       "\n• Asegúrate de que toda la cédula esté visible"}
+                    </Text>
+                    <Pressable 
                       onPress={() => handleOpenCamera(idx)}
                       style={{ backgroundColor: '#F3F4F6', borderRadius: 50, padding: 20, marginBottom: 12, alignSelf: 'center' }}
                     >
@@ -305,7 +405,68 @@ export default function BoardingPointsScreen() {
                         setPassengers(updated);
                       }}
                     />
-                  </View>
+                    {/* Selector de descuento */}
+                    <Text style={{ fontWeight: 'bold', color: '#7B61FF', marginBottom: 4, marginTop: 8 }}>
+                      Tipo de descuento
+                    </Text>
+                    <Text style={{ color: '#64748B', marginBottom: 8, fontSize: 13 }}>
+                      Señor pasajero, escoja "Ninguno" en caso de no tener discapacidad, ser tercera edad o menor de edad. La información se verificará cuando aborde al bus.
+                    </Text>
+                    {(Array.isArray(descuentos) && descuentos.length === 0) && (
+                      <Text style={{ color: '#64748B', marginBottom: 8 }}>No hay descuentos disponibles</Text>
+                    )}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
+                  <Pressable 
+                        onPress={() => {
+                          const updated = [...passengers];
+                          updated[idx].descuentoId = null;
+                          const precio = asientosSeleccionados[idx]?.precio || 0;
+                          updated[idx].totalSinDescPorPers = precio.toFixed(2);
+                          updated[idx].totalDescPorPers = '0.00';
+                          updated[idx].totalPorPer = precio.toFixed(2);
+                          setPassengers(updated);
+                        }}
+                        style={{
+                          padding: 8,
+                          borderRadius: 8,
+                          backgroundColor: passengers[idx].descuentoId === null ? '#7B61FF' : '#F3F4F6',
+                          marginRight: 8,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <Text style={{ color: passengers[idx].descuentoId === null ? '#fff' : '#0F172A' }}>Ninguno</Text>
+                  </Pressable>
+                      {(Array.isArray(descuentos) ? descuentos : []).map((desc) => (
+                  <Pressable 
+                          key={desc.id}
+                          onPress={() => {
+                            const updated = [...passengers];
+                            updated[idx].descuentoId = desc.id;
+                            // Calcular precios con descuento
+                            const precio = asientosSeleccionados[idx]?.precio || 0;
+                            const porcentaje = parseFloat(desc.porcentaje);
+                            const descValue = (precio * porcentaje / 100).toFixed(2);
+                            const finalValue = (precio - parseFloat(descValue)).toFixed(2);
+                            updated[idx].totalSinDescPorPers = precio.toFixed(2);
+                            updated[idx].totalDescPorPers = descValue;
+                            updated[idx].totalPorPer = finalValue;
+                            setPassengers(updated);
+                          }}
+                          style={{
+                            padding: 8,
+                            borderRadius: 8,
+                            backgroundColor: passengers[idx].descuentoId === desc.id ? '#7B61FF' : '#F3F4F6',
+                            marginRight: 8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <Text style={{ color: passengers[idx].descuentoId === desc.id ? '#fff' : '#0F172A' }}>
+                            {desc.tipoDescuento || desc.tipo_descuento}
+                    </Text>
+                  </Pressable>
+                      ))}
+              </View>
+            </View>
                 ))}
               </View>
             )}
@@ -315,7 +476,7 @@ export default function BoardingPointsScreen() {
                 Escoge el método de pago
               </Text>
               {metodosPago.map(metodo => (
-                <Pressable
+              <Pressable
                   key={metodo.id}
                   onPress={() => setMetodoPagoId(metodo.id)}
                   style={{
@@ -328,39 +489,39 @@ export default function BoardingPointsScreen() {
                   <Text style={{ color: metodoPagoId === metodo.id ? '#fff' : '#0F172A', fontWeight: 'bold' }}>
                     {metodo.nombre}
                   </Text>
-                </Pressable>
+              </Pressable>
               ))}
-            </View>
+              </View>
             {/* Botón continuar habilitado solo si todos los pasajeros tienen nombre y cédula y hay método de pago */}
-            <Pressable
-              style={[
-                styles.continueButton,
+              <Pressable
+                style={[
+                  styles.continueButton,
                 (!passengers.every(p => p.nombre && p.cedula) || !metodoPagoId) && styles.continueButtonDisabled
-              ]}
-              onPress={handleContinue}
+                ]}
+                onPress={handleContinue}
               disabled={!passengers.every(p => p.nombre && p.cedula) || !metodoPagoId}
-            >
-              <Text style={styles.continueButtonText}>
-                Continuar
-              </Text>
-            </Pressable>
+              >
+                <Text style={styles.continueButtonText}>
+                  Continuar
+                </Text>
+              </Pressable>
           </ScrollView>
         </LinearGradient>
         {/* Tab bar consistente */}
-        <View style={styles.bottomNav}>
+          <View style={styles.bottomNav}>
           <Pressable style={styles.navItem} onPress={() => router.replace('/(tabs)')}>
-            <Ionicons name="home-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="home-outline" size={24} color="#FFFFFF" />
             <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Inicio</Text>
-          </Pressable>
+            </Pressable>
           <Pressable style={styles.navItem} onPress={() => router.push('/tickets')}>
-            <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
             <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Tickets</Text>
-          </Pressable>
+            </Pressable>
           <Pressable style={styles.navItem} onPress={() => router.push('/profile')}>
-            <Ionicons name="person-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="person-outline" size={24} color="#FFFFFF" />
             <Text style={{ color: '#fff', fontSize: 12, marginTop: 2 }}>Perfil</Text>
-          </Pressable>
-        </View>
+            </Pressable>
+          </View>
       </View>
       {(loading || feedback) && (
         <View style={{ position: 'absolute', top: 80, left: 0, right: 0, zIndex: 1000, alignItems: 'center' }}>

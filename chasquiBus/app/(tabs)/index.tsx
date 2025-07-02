@@ -5,17 +5,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { API_URL } from '../../constants/api';
 
@@ -146,7 +146,14 @@ export default function HomeScreen() {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
-        const busesWithTarifa = await Promise.all((data.data || []).map(async (bus: any) => {
+        console.log('Buses programados recibidos del backend:', data.data || data);
+        // Ordenar por fecha y hora de salida ascendente
+        const busesOrdenados = (data.data || data || []).sort((a: any, b: any) => {
+          const dateA = new Date(`${a.fechaSalida}T${a.horaSalidaProg || '00:00:00'}`);
+          const dateB = new Date(`${b.fechaSalida}T${b.horaSalidaProg || '00:00:00'}`);
+          return dateA.getTime() - dateB.getTime();
+        });
+        const busesWithTarifa = await Promise.all(busesOrdenados.map(async (bus: any) => {
           if (bus.rutaId) {
             if (bus.piso_doble) {
               const valorNormal = await fetchTarifa(bus.rutaId, 'NORMAL');
@@ -562,7 +569,7 @@ export default function HomeScreen() {
               <Text style={{ textAlign: 'center', color: '#64748B' }}>No hay buses programados.</Text>
             ) : (
               <FlatList
-                data={directFilter === null ? allBuses : allBuses.filter(bus => bus.directo === directFilter)}
+                data={allBuses}
                 keyExtractor={item => item.id.toString()}
                 renderItem={({ item: bus, index }: { item: any; index: number }) => (
                   <TouchableOpacity
@@ -603,7 +610,7 @@ export default function HomeScreen() {
                         <Text style={{ fontWeight: '700', fontSize: 16, color: '#0F172A', marginBottom: 2 }}>{bus.nombre_cooperativa || 'Bus terminal'}</Text>
                         <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Origen : <Text style={{ color: '#0F172A' }}>{bus.ciudad_origen}</Text></Text>
                         <Text style={{ color: '#64748B', fontSize: 13 }}>Destino : <Text style={{ color: '#0F172A' }}>{bus.ciudad_destino}</Text></Text>
-                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Fecha : <Text style={{ color: '#0F172A' }}>{bus.fechaSalida ? formatDateLong(bus.fechaSalida) : ''}</Text></Text>
+                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Fecha : <Text style={{ color: '#0F172A' }}>{formatDateLong(bus.fechaSalida)}</Text></Text>
                       </View>
                       {/* Derecha: bloque negro con hora y fecha y TARIFA */}
                       <View style={{
@@ -1053,9 +1060,11 @@ function formatTime(hora: string): string {
 }
 function formatDateBlock(fecha: string): string {
   if (!fecha) return '';
-  const d = new Date(fecha);
-  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
-  return `${day} ${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+  // Espera formato YYYY-MM-DD
+  const [year, month, day] = fecha.split('-').map(Number);
+  const d = new Date(year, month - 1, day); // Mes base 0
+  const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${dayName} ${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // --- FUNCION PARA OBTENER TARIFA ---
@@ -1077,9 +1086,12 @@ const fetchTarifa = async (rutaId: any, tipoAsiento = 'NORMAL') => {
   }
 };
 
-function formatDateLong(fecha: string): string {
-  if (!fecha) return '';
-  const d = new Date(fecha);
+// Función para formatear la fecha larga
+function formatDateLong(fechaString: string) {
+  if (!fechaString) return '';
+  // Espera formato YYYY-MM-DD
+  const [year, month, day] = fechaString.split('-').map(Number);
+  const d = new Date(year, month - 1, day); // Mes base 0
   return d.toLocaleDateString('es-ES', {
     weekday: 'long',
     day: '2-digit',

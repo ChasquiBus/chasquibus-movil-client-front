@@ -28,6 +28,7 @@ export default function SeatSelectionScreen() {
   const [loadingAsientos, setLoadingAsientos] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [tarifas, setTarifas] = useState<any[]>([]);
 
   // Use the params passed from the bus selection screen
   const tripDetails = {
@@ -47,6 +48,9 @@ export default function SeatSelectionScreen() {
     price: `${params.price} $`,
     availableSeats: Number(params.seatsLeft),
   };
+
+  // Extraer el precio recibido por parámetro como número
+  const priceFromParams = Number(params.price) || 0;
 
   // Obtener configuración real de asientos
   useEffect(() => {
@@ -90,6 +94,26 @@ export default function SeatSelectionScreen() {
     fetchAsientos();
   }, [params.busId, params.idBus]);
 
+  // Obtener tarifas desde la API según el bus/ruta
+  useEffect(() => {
+    const fetchTarifas = async () => {
+      try {
+        const busId = params.busId || params.idBus;
+        const rutaId = params.rutaId; // Asegúrate de pasar rutaId desde la pantalla anterior
+        if (!rutaId) return;
+        const token = await AsyncStorage.getItem('access_token');
+        const res = await fetch(`${API_URL}/tarifas?rutaId=${rutaId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setTarifas(data);
+      } catch (e) {
+        setTarifas([]);
+      }
+    };
+    fetchTarifas();
+  }, [params.rutaId]);
+
   // Selección de asientos
   const handleSeatSelect = (seatId: number) => {
     setSelectedSeats(prev => {
@@ -112,9 +136,18 @@ export default function SeatSelectionScreen() {
     });
   };
 
-  // Calcular precio total
-  const pricePerSeat = parseFloat(tripDetails.price.replace('$', '').trim()) || 0;
-  const totalPrice = selectedSeats.length * pricePerSeat;
+  // Calcular el precio real de cada asiento seleccionado
+  const asientosSeleccionados = selectedSeats.map(num => {
+    const asiento = asientos.find(a => a.numeroAsiento === num);
+    const tarifa = tarifas.find(t => t.tipoAsiento === asiento?.tipoAsiento) || tarifas[0];
+    return {
+      numeroAsiento: num,
+      tipoAsiento: asiento?.tipoAsiento || 'NORMAL',
+      precio: tarifa ? parseFloat(tarifa.precio) : priceFromParams,
+      tarifaId: tarifa ? tarifa.id : null
+    };
+  });
+  const totalPrice = asientosSeleccionados.reduce((acc, a) => acc + (a.precio || 0), 0);
 
   // Filtrar asientos por piso
   const pisoActual = selectedFloor === 'lower' ? 1 : 2;
@@ -252,7 +285,7 @@ export default function SeatSelectionScreen() {
                     </View>
                     <View style={styles.priceBreakdown}>
                       <Text style={styles.priceBreakdownText}>
-                        ${pricePerSeat.toFixed(2)} × {selectedSeats.length} asiento{selectedSeats.length > 1 ? 's' : ''}
+                        ${asientosSeleccionados.find(a => a.numeroAsiento === selectedSeats[0])?.precio.toFixed(2) || '0.00'} × {selectedSeats.length} asiento{selectedSeats.length > 1 ? 's' : ''}
                       </Text>
                     </View>
                   </View>
@@ -267,8 +300,7 @@ export default function SeatSelectionScreen() {
                     router.push({
                       pathname: '/boarding-points',
                       params: {
-                        seats: selectedSeats.join(','),
-                        total: totalPrice.toFixed(2),
+                        asientosSeleccionados: JSON.stringify(asientosSeleccionados),
                         busId: params.busId || params.idBus,
                         asientosData: JSON.stringify(asientos),
                       }
