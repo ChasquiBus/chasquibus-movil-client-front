@@ -91,7 +91,7 @@ export default function SuccessScreen() {
 
               <Pressable
                 style={styles.button}
-                onPress={() => router.replace('/')}
+                onPress={() => router.replace('/(tabs)')}
               >
                 <Text style={styles.buttonText}>
                   Volver a la página de inicio

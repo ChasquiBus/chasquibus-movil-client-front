@@ -609,7 +609,8 @@ export default function BusSelectionScreen() {
                       seatsLeft: selectedBus?.asientos_disponibles || 0,
                       date: selectedBus?.fechaSalida ? formatDateBlock(selectedBus.fechaSalida) : '',
                       busId: selectedBus?.idBus,
-                      rutaId: selectedBus?.rutaId
+                      rutaId: selectedBus?.rutaId,
+                      hojaTrabajoId: selectedBus?.id
                     };
                     console.log('Enviando a seat-selection:', paramsToSend);
                     router.push({ pathname: '/seat-selection', params: paramsToSend });
