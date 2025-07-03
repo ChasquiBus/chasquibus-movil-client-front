@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -52,6 +53,9 @@ export default function SeatSelectionScreen() {
   // Extraer el precio recibido por parámetro como número
   const priceFromParams = Number(params.price) || 0;
 
+  // Al inicio de SeatSelectionScreen, agrega un log para rutaId
+  console.log('params.rutaId:', params.rutaId);
+
   // Obtener configuración real de asientos
   useEffect(() => {
     const fetchAsientos = async () => {
@@ -98,14 +102,18 @@ export default function SeatSelectionScreen() {
   useEffect(() => {
     const fetchTarifas = async () => {
       try {
-        const busId = params.busId || params.idBus;
-        const rutaId = params.rutaId; // Asegúrate de pasar rutaId desde la pantalla anterior
-        if (!rutaId) return;
+        const rutaId = params.rutaId;
+        if (!rutaId) {
+          console.log('No hay rutaId para consultar tarifas');
+          setTarifas([]);
+          return;
+        }
         const token = await AsyncStorage.getItem('access_token');
-        const res = await fetch(`${API_URL}/tarifas?rutaId=${rutaId}`, {
+        const res = await fetch(`${API_URL}/tarifas-paradas/ruta/${rutaId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
+        console.log('Tarifas recibidas:', data);
         setTarifas(data);
       } catch (e) {
         setTarifas([]);
@@ -139,11 +147,21 @@ export default function SeatSelectionScreen() {
   // Calcular el precio real de cada asiento seleccionado
   const asientosSeleccionados = selectedSeats.map(num => {
     const asiento = asientos.find(a => a.numeroAsiento === num);
-    const tarifa = tarifas.find(t => t.tipoAsiento === asiento?.tipoAsiento) || tarifas[0];
+    // Buscar tarifa por tipoAsiento y aplicaTarifa
+    const tarifa = tarifas.find(t => t.tipoAsiento === asiento?.tipoAsiento && t.aplicaTarifa) || tarifas.find(t => t.tipoAsiento === asiento?.tipoAsiento) || tarifas[0];
+    // Log para depuración
+    console.log('Tarifa seleccionada para asiento', num, tarifa);
+    // Usar el campo correcto de la tarifa (valor)
+    let precio = 0;
+    if (tarifa && tarifa.valor !== undefined && tarifa.valor !== null && !isNaN(Number(tarifa.valor))) {
+      precio = Number(tarifa.valor);
+    } else if (typeof priceFromParams === 'number' && !isNaN(priceFromParams)) {
+      precio = priceFromParams;
+    }
     return {
       numeroAsiento: num,
       tipoAsiento: asiento?.tipoAsiento || 'NORMAL',
-      precio: tarifa ? parseFloat(tarifa.precio) : priceFromParams,
+      precio,
       tarifaId: tarifa ? tarifa.id : null
     };
   });
@@ -170,6 +188,47 @@ export default function SeatSelectionScreen() {
       setSelectedSeats([]);
     };
   }, []);
+
+  console.log('tarifas:', tarifas);
+  console.log('asientosSeleccionados:', asientosSeleccionados);
+
+  // Refetch de asientos cada vez que la pantalla se enfoca
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchAsientos = async () => {
+        setLoadingAsientos(true);
+        try {
+          const busId = params.busId || params.idBus;
+          console.log('Bus ID usado para asientos:', busId);
+          if (!busId) return;
+          const token = await AsyncStorage.getItem('access_token');
+          // Esperar 1 segundo para asegurar que el backend ya actualizó
+          await new Promise(res => setTimeout(res, 1000));
+          const res = await fetch(`${API_URL}/configuracion-asientos/bus/${busId}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          const data = await res.json();
+          console.log('Respuesta de configuracion-asientos (refetch):', data);
+          const configData = Array.isArray(data) ? data[0] : data;
+          let posiciones = configData?.posiciones;
+          if (!posiciones && configData?.posicionesJson) {
+            posiciones = JSON.parse(configData.posicionesJson);
+          }
+          setAsientos(posiciones || []);
+        } catch (e) {
+          setAsientos([]);
+        }
+        setLoadingAsientos(false);
+      };
+      fetchAsientos();
+    }, [params.busId, params.idBus])
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -297,13 +356,24 @@ export default function SeatSelectionScreen() {
                   ]}
                   disabled={selectedSeats.length === 0}
                   onPress={() => {
+                    // Validar que todos los asientos seleccionados tengan tarifaId válido
+                    if (asientosSeleccionados.some(a => !a.tarifaId || a.tarifaId <= 0)) {
+                      setNotificationMessage('Error: Hay un asiento sin tarifa válida.');
+                      setShowNotification(true);
+                      setTimeout(() => setShowNotification(false), 2000);
+                      return;
+                    }
+                    const paramsToSend = {
+                      asientosSeleccionados: JSON.stringify(asientosSeleccionados),
+                      tarifas: JSON.stringify(tarifas),
+                      busId: params.busId || params.idBus,
+                      asientosData: JSON.stringify(asientos),
+                      rutaId: params.rutaId
+                    };
+                    console.log('Params enviados a boarding-points:', paramsToSend);
                     router.push({
                       pathname: '/boarding-points',
-                      params: {
-                        asientosSeleccionados: JSON.stringify(asientosSeleccionados),
-                        busId: params.busId || params.idBus,
-                        asientosData: JSON.stringify(asientos),
-                      }
+                      params: paramsToSend
                     });
                   }}
                 >

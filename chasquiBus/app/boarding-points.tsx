@@ -23,6 +23,7 @@ type Descuento = {
 interface Passenger {
   photo: string | null;
   nombre: string;
+  apellido: string;
   cedula: string;
   descuentoId: number | null;
   totalSinDescPorPers: string;
@@ -41,21 +42,26 @@ export default function BoardingPointsScreen() {
   const [checkingToken, setCheckingToken] = React.useState(true);
   const [descuentos, setDescuentos] = useState<Descuento[]>([]);
   const precioUnitario = seats.map(() => parseFloat(total) / seats.length);
+  const tarifas = typeof params.tarifas === 'string' ? JSON.parse(params.tarifas) : (params.tarifas || []);
   const [passengers, setPassengers] = useState<Passenger[]>(
-    asientosSeleccionados.map((a: any) => ({
-      photo: null,
-      nombre: '',
-      cedula: '',
-      descuentoId: null,
-      totalSinDescPorPers: a.precio.toFixed(2),
-      totalDescPorPers: '0.00',
-      totalPorPer: a.precio.toFixed(2),
-      tarifaId: a.tarifaId
-    }))
+    asientosSeleccionados.map((a: any) => {
+      const tarifa = tarifas.find((t: any) => t.tipoAsiento === a.tipoAsiento);
+      return {
+        photo: null,
+        nombre: '',
+        apellido: '',
+        cedula: '',
+        descuentoId: null,
+        totalSinDescPorPers: tarifa ? tarifa.valor : a.precio.toFixed(2),
+        totalDescPorPers: '0.00',
+        totalPorPer: tarifa ? tarifa.valor : a.precio.toFixed(2),
+        tarifaId: tarifa ? tarifa.id : null
+      };
+    })
   );
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  // Métodos de pago disponibles (puedes traerlos de la API si lo prefieres)
+  // Métodos de pago disponibles (hardcodeados por posición)
   const metodosPago = [
     { id: 3, nombre: 'Depósito Banco Pichincha' },
     { id: 4, nombre: 'PayPal' }
@@ -89,7 +95,7 @@ export default function BoardingPointsScreen() {
       }
     };
     fetchDescuentos();
-  }, []);
+  }, [params.cooperativaId]);
 
   if (checkingToken) {
     return (
@@ -113,6 +119,34 @@ export default function BoardingPointsScreen() {
   const handleContinue = async () => {
     if (!metodoPagoId) {
       setFeedback('Selecciona un método de pago');
+      return;
+    }
+    // Cruce de asientos y tarifas antes de enviar
+    const boletos = passengers.map((p, idx) => {
+      const asiento = asientosSeleccionados[idx];
+      // Filtrar por tipoAsiento y aplicaTarifa
+      const tarifa = tarifas.find((t: any) => t.tipoAsiento === asiento.tipoAsiento && t.aplicaTarifa);
+      if (!tarifa) {
+        setFeedback(`Error: No se encontró tarifa activa para el tipo de asiento ${asiento.tipoAsiento}`);
+        setLoading(false);
+        throw new Error(`No se encontró tarifa activa para el tipo de asiento: ${asiento.tipoAsiento}`);
+      }
+      return {
+        asientoNumero: asiento.numeroAsiento,
+        tarifaId: tarifa.id,
+        cedula: p.cedula,
+        nombre: p.nombre,
+        apellido: p.apellido,
+        descuentoId: p.descuentoId,
+        totalSinDescPorPers: tarifa.valor,
+        totalDescPorPers: p.totalDescPorPers,
+        totalPorPer: p.totalPorPer || tarifa.valor,
+      };
+    });
+    // Validación de tarifaId
+    if (boletos.some(b => !b.tarifaId || b.tarifaId <= 0)) {
+      setFeedback('Error: Hay un pasajero sin tarifa válida.');
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -162,16 +196,6 @@ export default function BoardingPointsScreen() {
       });
       // --- FIN CAMBIO ---
 
-      const boletos = passengers.map((p, idx) => ({
-        asientoNumero: asientosSeleccionados[idx]?.numeroAsiento,
-        tarifaId: passengers[idx].tarifaId,
-        cedula: p.cedula,
-        nombre: p.nombre,
-        descuentoId: p.descuentoId,
-        totalSinDescPorPers: p.totalSinDescPorPers,
-        totalDescPorPers: p.totalDescPorPers,
-        totalPorPer: p.totalPorPer,
-      }));
       const ventaPayload = {
         cooperativaId,
         metodoPagoId,
@@ -182,6 +206,7 @@ export default function BoardingPointsScreen() {
         posiciones,
         boletos,
       };
+      console.log('Payload a enviar:', ventaPayload);
       const token = await AsyncStorage.getItem('access_token');
       console.log('--- REGISTRO DE VENTA ---');
       console.log('URL:', `${API_URL}/ventas/app-cliente`);
@@ -200,9 +225,29 @@ export default function BoardingPointsScreen() {
       console.log('Respuesta backend:', text);
       if (response.ok) {
         setFeedback('Venta registrada con éxito');
-        setTimeout(() => {
+        setTimeout(async () => {
           setFeedback(null);
-          router.replace('/tickets');
+          try {
+            const venta = JSON.parse(text);
+            const ventaId = venta.id || venta.ventaId || (venta.venta && venta.venta.id);
+            console.log('Venta ID para fetch de boletos:', ventaId);
+            let boletos = [];
+            if (ventaId) {
+              const token = await AsyncStorage.getItem('access_token');
+              const boletosRes = await fetch(`${API_URL}/boletos/venta/${ventaId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              if (boletosRes.ok) {
+                boletos = await boletosRes.json();
+                console.log('Boletos recibidos del backend:', boletos);
+              } else {
+                console.log('Error al obtener boletos:', boletosRes.status, await boletosRes.text());
+              }
+            }
+            router.replace({ pathname: '/success', params: { venta: JSON.stringify({ ...venta, boletos }) } });
+          } catch (e) {
+            router.replace('/success');
+          }
         }, 1800);
       } else {
         setFeedback('Error al registrar la venta');
@@ -395,6 +440,17 @@ export default function BoardingPointsScreen() {
                     />
                     <TextInput
                       style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' }}
+                      placeholder="Apellido"
+                      placeholderTextColor="#64748B"
+                      value={passengers[idx].apellido}
+                      onChangeText={text => {
+                        const updated = [...passengers];
+                        updated[idx].apellido = text;
+                        setPassengers(updated);
+                      }}
+                    />
+                    <TextInput
+                      style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' }}
                       placeholder="Cédula"
                       placeholderTextColor="#64748B"
                       keyboardType="numeric"
@@ -476,7 +532,7 @@ export default function BoardingPointsScreen() {
                 Escoge el método de pago
               </Text>
               {metodosPago.map(metodo => (
-              <Pressable
+                <Pressable
                   key={metodo.id}
                   onPress={() => setMetodoPagoId(metodo.id)}
                   style={{
@@ -489,17 +545,17 @@ export default function BoardingPointsScreen() {
                   <Text style={{ color: metodoPagoId === metodo.id ? '#fff' : '#0F172A', fontWeight: 'bold' }}>
                     {metodo.nombre}
                   </Text>
-              </Pressable>
+                </Pressable>
               ))}
               </View>
-            {/* Botón continuar habilitado solo si todos los pasajeros tienen nombre y cédula y hay método de pago */}
+            {/* Botón continuar habilitado solo si todos los pasajeros tienen nombre, apellido y cédula y hay método de pago */}
               <Pressable
                 style={[
                   styles.continueButton,
-                (!passengers.every(p => p.nombre && p.cedula) || !metodoPagoId) && styles.continueButtonDisabled
+                (!passengers.every(p => p.nombre && p.apellido && p.cedula) || !metodoPagoId) && styles.continueButtonDisabled
                 ]}
                 onPress={handleContinue}
-              disabled={!passengers.every(p => p.nombre && p.cedula) || !metodoPagoId}
+              disabled={!passengers.every(p => p.nombre && p.apellido && p.cedula) || !metodoPagoId}
               >
                 <Text style={styles.continueButtonText}>
                   Continuar

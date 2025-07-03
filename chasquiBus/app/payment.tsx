@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ThemedText } from '../components/ThemedText';
 
 export default function PaymentScreen() {
@@ -27,9 +27,48 @@ export default function PaymentScreen() {
     router.push('/tickets');
   };
 
-  const handlePayment = () => {
-    // Handle payment processing
-    console.log('Processing payment...');
+  const handlePayment = async () => {
+    try {
+      // Aquí deberías armar el objeto ventaPayload con los datos reales
+      const ventaPayload = {
+        cooperativaId: 8, // <-- reemplaza por el valor real
+        metodoPagoId: 3, // <-- reemplaza por el valor real
+        hojaTrabajoId: 21, // <-- reemplaza por el valor real
+        estadoPago: 'PENDIENTE',
+        busId: 50, // <-- reemplaza por el valor real
+        tipoVenta: 'online',
+        posiciones: [
+          { numeroAsiento: 1, tipoAsiento: 'NORMAL' },
+          { numeroAsiento: 2, tipoAsiento: 'NORMAL' }
+        ],
+        boletos: [
+          {
+            numeroAsiento: 1,
+            tarifaId: 101,
+            cedula: '1234567890',
+            nombre: 'Juan Perez'
+          },
+          {
+            numeroAsiento: 2,
+            tarifaId: 101,
+            cedula: '0987654321',
+            nombre: 'Maria Lopez'
+          }
+        ]
+      };
+      // POST al backend
+      const res = await fetch('https://tu-backend.com/ventas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ventaPayload)
+      });
+      if (!res.ok) throw new Error('Error al crear la venta');
+      const venta = await res.json();
+      // Navega a success pasando la venta y boletos
+      router.replace({ pathname: '/success', params: { venta: JSON.stringify(venta) } });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo completar la venta. Intenta de nuevo.');
+    }
   };
 
   const formatCardNumber = (text: string) => {

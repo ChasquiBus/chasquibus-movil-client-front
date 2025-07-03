@@ -6,16 +6,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Modal,
+    Pressable,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { API_URL } from '../constants/api';
 
@@ -609,6 +609,7 @@ export default function BusSelectionScreen() {
                       seatsLeft: selectedBus?.asientos_disponibles || 0,
                       date: selectedBus?.fechaSalida ? formatDateBlock(selectedBus.fechaSalida) : '',
                       busId: selectedBus?.idBus,
+                      rutaId: selectedBus?.rutaId
                     };
                     console.log('Enviando a seat-selection:', paramsToSend);
                     router.push({ pathname: '/seat-selection', params: paramsToSend });
