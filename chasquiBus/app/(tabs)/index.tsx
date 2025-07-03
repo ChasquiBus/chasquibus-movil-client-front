@@ -10,6 +10,7 @@ import {
     Image,
     Modal,
     Pressable,
+    RefreshControl,
     SafeAreaView,
     StyleSheet,
     Text,
@@ -73,6 +74,8 @@ export default function HomeScreen() {
   const [checkingToken, setCheckingToken] = React.useState(true);
 
   const [directFilter, setDirectFilter] = useState<null | boolean>(null); // null: todos, true: solo directos, false: solo indirectos
+
+  const [refreshing, setRefreshing] = useState(false);
 
   const showUserFilter = fromLocation && toLocation;
 
@@ -299,6 +302,12 @@ export default function HomeScreen() {
       </Pressable>
     </Modal>
   );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchAllBuses();
+    setRefreshing(false);
+  };
 
   if (checkingToken) {
     return (
@@ -570,12 +579,17 @@ export default function HomeScreen() {
             ) : (
               <FlatList
                 data={allBuses}
-                keyExtractor={item => item.id.toString()}
-                renderItem={({ item: bus, index }: { item: any; index: number }) => (
+                keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#7B61FF']} />
+                }
+                renderItem={({ item, index }: { item: any; index: number }) => (
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
-                      setSelectedBus(bus);
+                      setSelectedBus(item);
                       setShowBusModal(true);
                     }}
                   >
@@ -607,10 +621,10 @@ export default function HomeScreen() {
                       </View>
                       {/* Centro: datos del bus */}
                       <View style={{ flex: 1, padding: 16, justifyContent: 'center' }}>
-                        <Text style={{ fontWeight: '700', fontSize: 16, color: '#0F172A', marginBottom: 2 }}>{bus.nombre_cooperativa || 'Bus terminal'}</Text>
-                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Origen : <Text style={{ color: '#0F172A' }}>{bus.ciudad_origen}</Text></Text>
-                        <Text style={{ color: '#64748B', fontSize: 13 }}>Destino : <Text style={{ color: '#0F172A' }}>{bus.ciudad_destino}</Text></Text>
-                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Fecha : <Text style={{ color: '#0F172A' }}>{formatDateLong(bus.fechaSalida)}</Text></Text>
+                        <Text style={{ fontWeight: '700', fontSize: 16, color: '#0F172A', marginBottom: 2 }}>{item.nombre_cooperativa || 'Bus terminal'}</Text>
+                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Origen : <Text style={{ color: '#0F172A' }}>{item.ciudad_origen}</Text></Text>
+                        <Text style={{ color: '#64748B', fontSize: 13 }}>Destino : <Text style={{ color: '#0F172A' }}>{item.ciudad_destino}</Text></Text>
+                        <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 2 }}>Fecha : <Text style={{ color: '#0F172A' }}>{formatDateLong(item.fechaSalida)}</Text></Text>
                       </View>
                       {/* Derecha: bloque negro con hora y fecha y TARIFA */}
                       <View style={{
@@ -624,27 +638,24 @@ export default function HomeScreen() {
                       }}>
                         <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>Hora de salida</Text>
                         <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>
-                          {formatTime(bus.horaSalidaProg)}
+                          {formatTime(item.horaSalidaProg)}
                         </Text>
                         <Text style={{ color: '#fff', fontSize: 13 }}>
-                          {formatDateBlock(bus.fechaSalida)}
+                          {formatDateBlock(item.fechaSalida)}
                         </Text>
                         {/* TARIFA */}
-                        {bus.piso_doble ? (
+                        {item.piso_doble ? (
                           <View style={{ marginTop: 4 }}>
-                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>Normal: {bus.valorNormal} $</Text>
-                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>VIP: {bus.valorVIP} $</Text>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>Normal: {item.valorNormal} $</Text>
+                            <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 13 }}>VIP: {item.valorVIP} $</Text>
                           </View>
                         ) : (
-                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>{bus.valorNormal} $</Text>
+                          <Text style={{ color: '#F59E42', fontWeight: 'bold', fontSize: 16, marginTop: 4 }}>{item.valorNormal} $</Text>
                         )}
                       </View>
                     </View>
                   </TouchableOpacity>
                 )}
-                showsVerticalScrollIndicator={false}
-                style={{ maxHeight: 330, borderRadius: 24, paddingBottom: 8 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
               />
             )}
           </View>
@@ -777,7 +788,8 @@ export default function HomeScreen() {
                   seatsLeft: selectedBus?.asientos_disponibles || 0,
                   date: selectedBus?.fechaSalida ? formatDateBlock(selectedBus.fechaSalida) : '',
                   busId: selectedBus?.idBus,
-                  rutaId: selectedBus?.rutaId
+                  rutaId: selectedBus?.rutaId,
+                  hojaTrabajoId: selectedBus?.id || selectedBus?.hojaTrabajoId
                 };
                 console.log('Enviando a seat-selection:', paramsToSend);
                 router.push({ pathname: '/seat-selection', params: paramsToSend });

@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import SeatSelection from '../components/SeatSelection';
 import { API_URL } from '../constants/api';
 
@@ -30,6 +30,7 @@ export default function SeatSelectionScreen() {
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [tarifas, setTarifas] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Use the params passed from the bus selection screen
   const tripDetails = {
@@ -230,10 +231,57 @@ export default function SeatSelectionScreen() {
     }, [params.busId, params.idBus])
   );
 
+  // Refrescar asientos y tarifas
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      (async () => {
+        try {
+          const busId = params.busId || params.idBus;
+          if (!busId) return;
+          const token = await AsyncStorage.getItem('access_token');
+          const res = await fetch(`${API_URL}/configuracion-asientos/bus/${busId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await res.json();
+          const configData = Array.isArray(data) ? data[0] : data;
+          let posiciones = configData?.posiciones;
+          if (!posiciones && configData?.posicionesJson) {
+            posiciones = JSON.parse(configData.posicionesJson);
+          }
+          setAsientos(posiciones || []);
+        } catch (e) {
+          setAsientos([]);
+        }
+      })(),
+      (async () => {
+        try {
+          const rutaId = params.rutaId;
+          if (!rutaId) return;
+          const token = await AsyncStorage.getItem('access_token');
+          const res = await fetch(`${API_URL}/tarifas-paradas/ruta/${rutaId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await res.json();
+          setTarifas(data);
+        } catch (e) {
+          setTarifas([]);
+        }
+      })()
+    ]);
+    setRefreshing(false);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <View style={{ flex: 1, position: 'relative' }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 80 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#7B61FF']} />
+          }
+        >
           <Stack.Screen
             options={{
               headerShown: false,
@@ -368,7 +416,8 @@ export default function SeatSelectionScreen() {
                       tarifas: JSON.stringify(tarifas),
                       busId: params.busId || params.idBus,
                       asientosData: JSON.stringify(asientos),
-                      rutaId: params.rutaId
+                      rutaId: params.rutaId,
+                      hojaTrabajoId: params.hojaTrabajoId
                     };
                     console.log('Params enviados a boarding-points:', paramsToSend);
                     router.push({

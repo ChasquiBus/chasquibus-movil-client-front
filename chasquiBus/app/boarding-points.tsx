@@ -154,7 +154,12 @@ export default function BoardingPointsScreen() {
     try {
       // IDs y datos de ejemplo, reemplaza por los reales de params si existen
       const cooperativaId = params.cooperativaId || 1;
-      const hojaTrabajoId = params.hojaTrabajoId || 3;
+      const hojaTrabajoId = Number(params.hojaTrabajoId);
+      if (!hojaTrabajoId || isNaN(hojaTrabajoId)) {
+        setFeedback('Error: No se seleccionó un viaje válido. Intenta de nuevo.');
+        setLoading(false);
+        return;
+      }
       const busId = Number(params.busId || params.idBus || 5);
       const tipoVenta = 'online';
       const estadoPago = 'pagado';
@@ -429,7 +434,7 @@ export default function BoardingPointsScreen() {
                     )}
                     <TextInput
                       style={{ backgroundColor: '#F8FAFC', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' }}
-                      placeholder="Nombre completo"
+                      placeholder="Nombre"
                       placeholderTextColor="#64748B"
                       value={passengers[idx].nombre}
                       onChangeText={text => {
