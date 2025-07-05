@@ -3,7 +3,7 @@ export const API_CONFIG = {
     // Para desarrollo local: 'http://localhost:3001'
     // Para IP específica: 'http://192.168.1.6:3001'
     // Para producción: 'https://chasquibus-back.onrender.com'
-    BASE_URL: 'http://192.168.1.6:3001', // URL del backend en tu red local
+    BASE_URL: 'http://192.168.100.29:3001', // URL del backend en tu red local
     ENDPOINTS: {
         AUTH: {
             LOGIN: '/auth/login',
