@@ -209,7 +209,7 @@ export default function BoardingPointsScreen() {
         busId,
         tipoVenta,
         posiciones,
-        boletos,
+        boletos
       };
       console.log('Payload a enviar:', ventaPayload);
       const token = await AsyncStorage.getItem('access_token');
@@ -228,32 +228,64 @@ export default function BoardingPointsScreen() {
       console.log('Status HTTP:', response.status);
       const text = await response.text();
       console.log('Respuesta backend:', text);
-      if (response.ok) {
-        setFeedback('Venta registrada con éxito');
-        setTimeout(async () => {
-          setFeedback(null);
-          try {
-            const venta = JSON.parse(text);
-            const ventaId = venta.id || venta.ventaId || (venta.venta && venta.venta.id);
-            console.log('Venta ID para fetch de boletos:', ventaId);
-            let boletos = [];
-            if (ventaId) {
-              const token = await AsyncStorage.getItem('access_token');
-              const boletosRes = await fetch(`${API_URL}/boletos/venta/${ventaId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              if (boletosRes.ok) {
-                boletos = await boletosRes.json();
-                console.log('Boletos recibidos del backend:', boletos);
-              } else {
-                console.log('Error al obtener boletos:', boletosRes.status, await boletosRes.text());
-              }
-            }
-            router.replace({ pathname: '/success', params: { venta: JSON.stringify({ ...venta, boletos }) } });
-          } catch (e) {
-            router.replace('/success');
-          }
-        }, 1800);
+if (response.ok) {
+  setFeedback('Venta registrada con éxito');
+  setTimeout(async () => {
+    setFeedback(null);
+    try {
+      const venta = JSON.parse(text);
+      const ventaId = venta.id || venta.ventaId || (venta.venta && venta.venta.id);
+      const pago = venta.pago;
+      let boletos: any[] = [];
+
+      // 👉 1. Si el método de pago es PayPal, redirige al WebView con la URL de PayPal
+      const isPaypal = metodoPagoId === metodosPago[1].id; 
+      const paypalUrl = pago?.url;
+
+      if (isPaypal && paypalUrl) {
+        // 🚀 Redirigir a la pantalla con WebView embebido
+        router.replace({
+          pathname: '/paginas-pagos/paypal-webview',
+          params: { url: encodeURIComponent(paypalUrl) },
+        });
+        return;
+      }
+
+      // 👉 2. Si el método de pago es Depósito, redirige a las instrucciones
+      const isDeposito = metodoPagoId === metodosPago[0].id;
+      if (isDeposito) {
+        // 🚀 Redirigir a la pantalla de instrucciones de depósito con los datos de la venta
+        router.replace({
+          pathname: '/paginas-pagos/deposito-view',
+          params: { ventaData: JSON.stringify({ ...venta, boletos }) },
+        });
+        return;
+      }
+
+      // 👉 2. Si no es PayPal, continúa flujo normal
+      if (ventaId) {
+        const token = await AsyncStorage.getItem('access_token');
+        const boletosRes = await fetch(`${API_URL}/boletos/venta/${ventaId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (boletosRes.ok) {
+          boletos = await boletosRes.json();
+          console.log('Boletos recibidos del backend:', boletos);
+        } else {
+          console.log('Error al obtener boletos:', boletosRes.status, await boletosRes.text());
+        }
+      }
+
+      router.replace({
+        pathname: '/success',
+        params: { venta: JSON.stringify({ ...venta, boletos }) },
+      });
+
+    } catch (e) {
+      console.error('Error al procesar respuesta de venta:', e);
+      router.replace('/success');
+    }
+  }, 1800);
       } else {
         setFeedback('Error al registrar la venta');
         setTimeout(() => setFeedback(null), 2500);
