@@ -7,8 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { API_URL } from '../../constants/api';
 
 // Define la interfaz para un boleto
@@ -42,7 +42,6 @@ interface Boleto {
   rutaId?: number;
   codigoRuta?: string;
   usado?: boolean;
-  apellido?: string;
 }
 
 export default function TicketsScreen() {
@@ -52,7 +51,6 @@ export default function TicketsScreen() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [loadingBoletos, setLoadingBoletos] = useState(true);
   const [filtro, setFiltro] = useState('proximos'); // 'proximos', 'usados', 'todos'
-  const [refreshing, setRefreshing] = useState(false);
 
   React.useEffect(() => {
     const checkToken = async () => {
@@ -66,26 +64,21 @@ export default function TicketsScreen() {
     checkToken();
   }, []);
 
-  const fetchBoletos = async () => {
-    setLoadingBoletos(true);
-    try {
+  useEffect(() => {
+    const fetchBoletos = async () => {
+      setLoadingBoletos(true);
       const token = await AsyncStorage.getItem('access_token');
-      if (!token) return;
       const res = await fetch(`${API_URL}/boletos/mis-boletos`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setBoletos(data);
+      } else {
+        setBoletos([]);
       }
-    } catch (e) {
-      //
-    } finally {
       setLoadingBoletos(false);
-    }
-  };
-
-  React.useEffect(() => {
+    };
     fetchBoletos();
   }, []);
 
@@ -134,12 +127,6 @@ export default function TicketsScreen() {
       Alert.alert('Error', 'No se pudo compartir el QR');
       console.error('Error al compartir QR:', error);
     }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchBoletos();
-    setRefreshing(false);
   };
 
   if (checkingToken) {
@@ -206,12 +193,7 @@ export default function TicketsScreen() {
           </View>
 
           {/* Lista de boletos */}
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: 32 }}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#7B61FF']} />
-            }
-          >
+          <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
             {boletosOrdenados.length === 0 ? (
               <Text style={{ color: '#64748B', textAlign: 'center', marginTop: 32, fontSize: 16 }}>
                 No tienes boletos aún.
@@ -232,9 +214,7 @@ export default function TicketsScreen() {
                   </View>
                   <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 4, color: '#7B61FF' }}>Boleto #{boleto.id}</Text>
                   <Text>Asiento: <Text style={{ fontWeight: 'bold' }}>{boleto.asientoNumero}</Text>  |  Tipo: <Text style={{ fontWeight: 'bold' }}>{boleto.tipoAsiento}</Text></Text>
-                  <Text style={{ fontSize: 15, color: '#0F172A', marginBottom: 2 }}>
-                    Pasajero: <Text style={{ fontWeight: 'bold' }}>{boleto.nombre}{boleto.apellido ? ' ' + boleto.apellido : ''}</Text> (Cédula: <Text style={{ fontWeight: 'bold' }}>{boleto.cedula}</Text>)
-                  </Text>
+                  <Text>Pasajero: <Text style={{ fontWeight: 'bold' }}>{boleto.nombre}</Text> (Cédula: <Text style={{ fontWeight: 'bold' }}>{boleto.cedula}</Text>)</Text>
                   <Text>Tipo de venta: <Text style={{ fontWeight: 'bold' }}>{boleto.tipoVenta}</Text></Text>
                   <Text>Ruta: <Text style={{ fontWeight: 'bold' }}>{boleto.codigoRuta || 'N/A'}</Text></Text>
                   <Text>Bus: <Text style={{ fontWeight: 'bold' }}>{boleto.numeroBus || 'N/A'}</Text> ({boleto.placaBus || 'N/A'})</Text>
